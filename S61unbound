@@ -1,4 +1,20 @@
 #!/bin/sh
+
+if [ "$1" = "start" ] || [ "$1" = "restart" ]; then
+        # Wait for NTP before starting
+        ntptimer=0
+        while [ "$(nvram get ntp_ready)" = "0" ] && [ "$ntptimer" -lt "60" ]; do
+                ntptimer=$((ntptimer+1))
+                [ "$ntptimer" -eq "1" ] && logger -st "S61unbound" "Waiting for NTP to sync before starting Unbound..."
+                sleep 1
+        done
+
+        if [ "$ntptimer" -ge "60" ]; then
+                logger -st "S61unbound" "NTP failed to sync after 1 minute - please check immediately!"
+                exit 1
+        fi
+fi
+
 logger -t S61unbound "Starting Unbound DNS server $0"
 # set environment PATH to system binaries
 export PATH=/sbin:/bin:/usr/sbin:/usr/bin:$PATH
