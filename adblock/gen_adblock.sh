@@ -16,7 +16,7 @@ echo "Removing possible temporary files.."
 
 # check for sites file
 if [ ! -f $sites ]; then
-  echo "Missing $sites file"
+  logger -st "($(basename $0))" "Missing $sites file"
   exit
 fi
 
@@ -56,12 +56,12 @@ awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $permlist $tempoutlist > $outli
 
 echo "Removing duplicate formatting from the domain list..."
 cat $outlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $finalist
-numberOfAdsBlocked=$(cat $outlist | wc -l | sed 's/^[ \t]*//')
+numberOfAdsBlocked=$(wc -l < $outlist)
 echo "$numberOfAdsBlocked domains compiled"
 
 echo "Generating Unbound adlist....."
-cat $finalist | grep '^0\.0\.0\.0' | awk '{print "local-zone: \""$2"\" always_nxdomain"}' > $adlist
-numberOfAdsBlocked=$(cat $adlist | wc -l | sed 's/^[ \t]*//')
+awk '/^0.0.0.0/ {print "local-zone: \""$2"\" always_nxdomain"}' $finalist > $adlist
+numberOfAdsBlocked=$(wc -l < $adlist)
 echo "$numberOfAdsBlocked suspicious and blocked domains"
 
 echo "Removing temporary files..."
