@@ -45,19 +45,19 @@ done < "$sites"
 echo "Combining User Custom block host..."
 cat /opt/var/lib/unbound/adblock/blockhost >> $tempoutlist
 
-echo "Removing duplicate formatting from the domain list..."
-cat $tempoutlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $outlist
-numberOfAdsBlocked=$(cat $outlist | wc -l | sed 's/^[ \t]*//')
-echo "$numberOfAdsBlocked domains compiled"
-
 if [ -f $tempwhitelistoutlist ]; then
   echo "Removing any downloaded whitelist items..."
-  fgrep -vf $tempwhitelistoutlist $outlist > $finalist
-  mv $finalist $outlist
+  awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $tempwhitelistoutlist $tempoutlist > $outlist
+  mv $outlist $tempoutlist
 fi
 
 echo "Edit User Custon list of allowed domains..."
-fgrep -vf $permlist $outlist  > $finalist
+awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $permlist $tempoutlist > $outlist
+
+echo "Removing duplicate formatting from the domain list..."
+cat $outlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $finalist
+numberOfAdsBlocked=$(cat $outlist | wc -l | sed 's/^[ \t]*//')
+echo "$numberOfAdsBlocked domains compiled"
 
 echo "Generating Unbound adlist....."
 cat $finalist | grep '^0\.0\.0\.0' | awk '{print "local-zone: \""$2"\" always_nxdomain"}' > $adlist
@@ -70,7 +70,5 @@ echo "Removing temporary files..."
 [ -f $outlist ] && rm -f $outlist
 [ -f $finalist ] && rm -f $finalist
 
-#echo "Removing log's files..."
-#[ -f /opt/var/lib/unbound/unbound.log ] && rm -f /opt/var/lib/unbound/unbound.log
 echo "Restarting DNS servers..."
 /opt/etc/init.d/S61unbound restart
