@@ -55,7 +55,7 @@ echo "Edit User Custon list of allowed domains..."
 awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $permlist $tempoutlist > $outlist
 
 echo "Removing duplicate formatting from the domain list..."
-cat $outlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $finalist
+cat $outlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e '/^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\).*$/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $finalist
 numberOfAdsBlocked=$(wc -l < $outlist)
 echo "$numberOfAdsBlocked domains compiled"
 
