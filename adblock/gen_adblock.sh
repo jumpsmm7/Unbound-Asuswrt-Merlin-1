@@ -21,12 +21,13 @@ tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
 tempwhitelistoutlist="/opt/var/lib/unbound/adblock/whitelist.tmp"
 outlist='/opt/var/lib/unbound/adblock/tmp.host'
 finalist='/opt/var/lib/unbound/adblock/tmp.finalhost'
-permlist='/opt/var/lib/unbound/adblock/permlist'
+permlist='/opt/share/unbound/configs/permlist'
+blocklist='/opt/share/unbound/configs/blockhost'
 adlist='/opt/var/lib/unbound/adblock/adservers'
 sites='/opt/share/unbound/configs/sites'
 
 #used to save cache before restart
-cacheFile="/opt/share/unbound/configs/cache.txt"
+cacheFile="/opt/share/unbound/configs/cache.tmp"
 
 #used to write out stats in case people want to see
 statsFile="/opt/var/lib/unbound/adblock/stats.txt"
@@ -66,7 +67,7 @@ do
 done < "$sites"
 
 echo "Combining User Custom block host..."
-cat /opt/var/lib/unbound/adblock/blockhost >> $tempoutlist
+cat $blocklist >> $tempoutlist
 
 if [ -f $tempwhitelistoutlist ]; then
   echo "Removing any downloaded whitelist items..."
