@@ -277,6 +277,7 @@ case "$1" in
 		Auto_Cron create
 		Mount_WebUI
 		Create_Dirs
+		Generate_UnboundStats
 		exit 0
 	;;
 	generate)
