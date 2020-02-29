@@ -1,4 +1,19 @@
 #!/bin/bash
+
+# AdBlock Script to download from customizable lists and merge into unbound rules file.
+# Use permlist file in same folder to add per line domains you want to whitelist.
+# Use blocklist file in same folder to block per line domains you want to block.
+# Use sites file to create list of sites/URLs you want to download from and merge.
+# File is in the format of 1 site/URL per line with two parts.
+#	<type> <URL>
+#	type can be one of:
+#		domains - for blocklists of the format of 1 domain per line
+#		hosts - for blocklists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
+#		whitelist-domains - for whitelists of the format of 1 domain per line
+#
+# @juched - v1.0.0
+# 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
+
 destinationIP="0.0.0.0"
 tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
 tempwhitelistoutlist="/opt/var/lib/unbound/adblock/whitelist.tmp"
