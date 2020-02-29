@@ -11,8 +11,9 @@
 #		hosts - for blocklists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
 #		whitelist-domains - for whitelists of the format of 1 domain per line
 #
-# @juched - v1.0.0
+# @juched - v1.0.1
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
+# v1.0.1 - moved config to /opt/share/unbound/configs
 
 destinationIP="0.0.0.0"
 tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
@@ -21,7 +22,7 @@ outlist='/opt/var/lib/unbound/adblock/tmp.host'
 finalist='/opt/var/lib/unbound/adblock/tmp.finalhost'
 permlist='/opt/var/lib/unbound/adblock/permlist'
 adlist='/opt/var/lib/unbound/adblock/adservers'
-sites='/opt/var/lib/unbound/adblock/sites'
+sites='/opt/share/unbound/configs/sites'
 
 echo "Removing possible temporary files.."
 [ -f $tempoutlist ] && rm -f $tempoutlist
