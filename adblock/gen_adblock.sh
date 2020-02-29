@@ -14,6 +14,7 @@
 # @juched - v1.0.1
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
 # v1.0.1 - moved config to /opt/share/unbound/configs
+#	 - save and reload unbound cache on restart
 
 destinationIP="0.0.0.0"
 tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
@@ -23,6 +24,12 @@ finalist='/opt/var/lib/unbound/adblock/tmp.finalhost'
 permlist='/opt/var/lib/unbound/adblock/permlist'
 adlist='/opt/var/lib/unbound/adblock/adservers'
 sites='/opt/share/unbound/configs/sites'
+
+#used to save cache before restart
+cacheFile="/opt/share/unbound/configs/cache.txt"
+
+#used to write out stats in case people want to see
+statsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
 echo "Removing possible temporary files.."
 [ -f $tempoutlist ] && rm -f $tempoutlist
@@ -78,7 +85,8 @@ echo "$numberOfAdsBlocked domains compiled"
 echo "Generating Unbound adlist....."
 awk '/^0.0.0.0/ {print "local-zone: \""$2"\" always_nxdomain"}' $finalist > $adlist
 numberOfAdsBlocked=$(wc -l < $adlist)
-echo "$numberOfAdsBlocked suspicious and blocked domains"
+echo " Number of adblocked (ads/malware/tracker) and blacklisted domains: $numberOfAdsBlocked" > $statsFile
+echo " Last updated: $(date +"%c")" >> $statsFile
 
 echo "Removing temporary files..."
 [ -f $tempoutlist ] && rm -f $tempoutlist
@@ -86,5 +94,9 @@ echo "Removing temporary files..."
 [ -f $outlist ] && rm -f $outlist
 [ -f $finalist ] && rm -f $finalist
 
-echo "Restarting DNS servers..."
+echo "Restarting Unbound DNS server..."
+echo $cacheFile
+unbound-control dump_cache > $cacheFile
 /opt/etc/init.d/S61unbound restart
+[ -s $cacheFile ] && unbound-control load_cache < $cacheFile 1>/dev/null
+[ -f $cacheFile ] && rm -f $cacheFile

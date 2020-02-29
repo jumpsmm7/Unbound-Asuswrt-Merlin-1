@@ -26,6 +26,7 @@ statsFile="$SCRIPT_WEB_DIR/unboundstats.txt"
 statsTitleFile="$SCRIPT_WEB_DIR/unboundstatstitle.txt"
 statsFileJS="$SCRIPT_WEB_DIR/unboundstats.js"
 statsTitleFileJS="$SCRIPT_WEB_DIR/unboundstatstitle.js"
+adblockStatsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
 #function to create JS file with data
 WriteStats_ToJS(){
@@ -63,6 +64,12 @@ Generate_UnboundStats () {
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.rrset=/ {print "\\n RRset cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.message=/ {print "\\n Message cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
  	fi
+
+	#adblock stats
+	if [ -f /opt/var/lib/unbound/adblock/adservers ] && [ -f $adblockStatsFile ]; then
+		printf "\\n\\n Adblock Statistics\\n$LINE" >> $statsFile
+		printf "$(cat $adblockStatsFile )" >> $statsFile
+	fi
 	
 	#calc % served by cache
 	printf "$(awk 'BEGIN {printf "\\n\\n Cache hit success percent: %0.2f", '$UNB_NUM_CH'*100/'$UNB_NUM_Q'}' )" >> $statsFile
