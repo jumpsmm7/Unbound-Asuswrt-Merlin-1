@@ -209,7 +209,7 @@ Mount_WebUI(){
 		mount -o bind /tmp/index_style.css /www/index_style.css
 		
 		if [ ! -f "/tmp/menuTree.js" ]; then
-			p -f "/www/require/modules/menuTree.js" "/tmp/"
+			cp -f "/www/require/modules/menuTree.js" "/tmp/"
 		fi
 		
 		sed -i "\\~$MyPage~d" /tmp/menuTree.js
