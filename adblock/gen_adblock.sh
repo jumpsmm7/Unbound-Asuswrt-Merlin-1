@@ -11,19 +11,25 @@
 #		hosts - for blocklists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
 #		whitelist-domains - for whitelists of the format of 1 domain per line
 #
-# @juched - v1.0.1
+# @juched - v1.0.2
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
 # v1.0.1 - moved config to /opt/share/unbound/configs
 #	 - save and reload unbound cache on restart
+# v1.0.2 - separated required domains from user editable domains for allow list
 
 destinationIP="0.0.0.0"
+
+#adblock function paths
 tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
 tempwhitelistoutlist="/opt/var/lib/unbound/adblock/whitelist.tmp"
 outlist='/opt/var/lib/unbound/adblock/tmp.host'
 finalist='/opt/var/lib/unbound/adblock/tmp.finalhost'
-permlist='/opt/share/unbound/configs/permlist'
-blocklist='/opt/share/unbound/configs/blockhost'
+permlist='/opt/var/lib/unbound/adblock/permlist'
 adlist='/opt/var/lib/unbound/adblock/adservers'
+
+#user settings paths
+blocklist='/opt/share/unbound/configs/blockhost'
+allowlist='/opt/share/unbound/configs/allowlist'
 sites='/opt/share/unbound/configs/sites'
 
 #used to save cache before restart
@@ -75,7 +81,10 @@ if [ -f $tempwhitelistoutlist ]; then
   mv $outlist $tempoutlist
 fi
 
-echo "Edit User Custon list of allowed domains..."
+echo "Filtering required domains from adblock list..."
+awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $allowhost $tempoutlist > $outlist
+
+echo "Filtering user requested domains from adblock list..."
 awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $permlist $tempoutlist > $outlist
 
 echo "Removing duplicate formatting from the domain list..."
