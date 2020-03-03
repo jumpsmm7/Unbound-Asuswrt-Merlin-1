@@ -135,7 +135,7 @@ Generate_UnboundStats () {
 	UNB_NUM_Q="$(awk 'BEGIN {FS="[= ]"} /total.num.queries=/ {print $2}' $raw_statsFile )"
 	UNB_NUM_CH="$(awk 'BEGIN {FS="[= ]"} /total.num.cachehits=/ {print $2}' $raw_statsFile )"
 	printf "\\n Number of DNS queries: %s" "$UNB_NUM_Q" >> $statsFile
-	printf "\\n Number of queries that were successfully answerd using cache lookup (ie. cache hit): %s" "$UNB_NUM_CH" >> $statsFile
+	printf "\\n Number of queries that were successfully answered using cache lookup (ie. cache hit): %s" "$UNB_NUM_CH" >> $statsFile
 	printf "$(awk 'BEGIN {FS="[= ]"} /total.num.cachemiss=/ {print "\\n Number of queries that needed recursive lookup (ie. cache miss): " $2}' $raw_statsFile )" >> $statsFile
 	printf "$(awk 'BEGIN {FS="[= ]"} /total.num.zero_ttl=/ {print "\\n Number of replies that were served by an expired cache entry: " $2}' $raw_statsFile )" >> $statsFile
 	printf "$(awk 'BEGIN {FS="[= ]"} /total.requestlist.exceeded=/ {print "\\n Number of queries dropped because request list was full: " $2}' $raw_statsFile )" >> $statsFile

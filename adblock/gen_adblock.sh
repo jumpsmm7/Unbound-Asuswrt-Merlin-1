@@ -11,11 +11,12 @@
 #		hosts - for blocklists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
 #		whitelist-domains - for whitelists of the format of 1 domain per line
 #
-# @juched - v1.0.2
+# @juched - v1.0.3
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
 # v1.0.1 - moved config to /opt/share/unbound/configs
 #	 - save and reload unbound cache on restart
 # v1.0.2 - separated required domains from user editable domains for allow list
+# v1.0.3 - switched to use unbound_manager.sh restart to be more safe
 
 destinationIP="0.0.0.0"
 
@@ -31,9 +32,6 @@ adlist='/opt/var/lib/unbound/adblock/adservers'
 blocklist='/opt/share/unbound/configs/blockhost'
 allowlist='/opt/share/unbound/configs/allowlist'
 sites='/opt/share/unbound/configs/sites'
-
-#used to save cache before restart
-cacheFile="/opt/share/unbound/configs/cache.tmp"
 
 #used to write out stats in case people want to see
 statsFile="/opt/var/lib/unbound/adblock/stats.txt"
@@ -105,8 +103,5 @@ echo "Removing temporary files..."
 [ -f $finalist ] && rm -f $finalist
 
 echo "Restarting Unbound DNS server..."
-echo $cacheFile
-unbound-control dump_cache > $cacheFile
-/opt/etc/init.d/S61unbound restart
-[ -s $cacheFile ] && unbound-control load_cache < $cacheFile 1>/dev/null
-[ -f $cacheFile ] && rm -f $cacheFile
+/jffs/addons/unbound/unbound_manager.sh restart
+echo "Adblock update complete!"
