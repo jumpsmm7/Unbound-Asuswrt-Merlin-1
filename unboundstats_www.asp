@@ -402,8 +402,8 @@ function applyRule() {
 }
 
 function Draw_Histogram_Chart() {
-	if(typeof barLabelsHistogram === 'undefined' || barLabelsHistogram === null) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if(typeof barDataHistogram === 'undefined' || barDataHistogram === null) { Draw_Chart_NoData("ChartHistogram"); return; }
+	if(typeof barLabelsHistogram === 'undefined' || barLabelsHistogram === null || (Array.isArray(barLabelsHistogram) && barLabelsHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
+	if(typeof barDataHistogram === 'undefined' || barDataHistogram === null || (Array.isArray(barDataHistogram) && barDataHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
 	if (barLabelsHistogram.length == 0) { Draw_Chart_NoData("ChartHistogram"); return; }
 	if (BarChartHistogram != undefined) BarChartHistogram.destroy();
 	var ctx = document.getElementById("ChartHistogram").getContext("2d");
@@ -485,8 +485,8 @@ function Draw_Histogram_Chart() {
 }
 
 function Draw_Answers_Chart() {
-	if(typeof barLabelsAnswers === 'undefined' || barLabelsAnswers === null) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if(typeof barDataAnswers === 'undefined' || barDataAnswers === null) { Draw_Chart_NoData("ChartAnswers"); return; }
+	if(typeof barLabelsAnswers === 'undefined' || barLabelsAnswers === null || (Array.isArray(barLabelsAnswers) && barLabelsAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
+	if(typeof barDataAnswers === 'undefined' || barDataAnswers === null || (Array.isArray(barDataAnswers) && barDataAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
 	if (barLabelsAnswers.length == 0) { Draw_Chart_NoData("ChartAnswers"); return; }
 	if (BarChartAnswers != undefined) BarChartAnswers.destroy();
 	var ctx = document.getElementById("ChartAnswers").getContext("2d");
