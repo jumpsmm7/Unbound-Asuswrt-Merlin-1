@@ -6,8 +6,10 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.0.0
+## by @juched v1.0.1
 ## with credit to @JackYaz for his shared scripts
+## V1.0.0 - initial text based only UI items
+## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -21,12 +23,21 @@ readonly SCRIPT_DIR="/jffs/addons/unbound"
 readonly UNBOUNCTRLCMD="unbound-control"
 
 #define data file names
-raw_statsFile="$SCRIPT_WEB_DIR/raw_stats.txt"
+raw_statsFile="/tmp/unbound_raw_stats.txt"
 statsFile="$SCRIPT_WEB_DIR/unboundstats.txt"
 statsTitleFile="$SCRIPT_WEB_DIR/unboundstatstitle.txt"
 statsFileJS="$SCRIPT_WEB_DIR/unboundstats.js"
 statsTitleFileJS="$SCRIPT_WEB_DIR/unboundstatstitle.js"
+statsCHPFileJS="$SCRIPT_WEB_DIR/unboundchpstats.js"
+statsHistogramFileJS="$SCRIPT_WEB_DIR/unboundhistogramstats.js"
+statsAnswersFileJS="$SCRIPT_WEB_DIR/unboundanswersstats.js"
 adblockStatsFile="/opt/var/lib/unbound/adblock/stats.txt"
+
+#save md5 of last installed www ASP file so you can find it again later (in case of www ASP update)
+installedMD5File="$SCRIPT_DIR/www-installed.md5"
+
+#get sqlite path
+[ -f /opt/bin/sqlite3 ] && SQLITE3_PATH=/opt/bin/sqlite3 || SQLITE3_PATH=/usr/sbin/sqlite3
 
 #function to create JS file with data
 WriteStats_ToJS(){
@@ -38,6 +49,78 @@ WriteStats_ToJS(){
 	done < "$1"
 	html="$html"'"'
 	printf "%s\\r\\n}\\r\\n" "$html" >> "$2"
+}
+
+WriteData_ToJS(){
+	{
+	echo "var $3;"
+	echo "$3 = [];"; } >> "$2"
+	contents="$3"'.unshift('
+	while IFS='' read -r line || [ -n "$line" ]; do
+		if echo "$line" | grep -q "NaN"; then continue; fi
+		datapoint="{ x: moment.unix(""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
+		contents="$contents""$datapoint"","
+	done < "$1"
+	contents=$(echo "$contents" | sed 's/.$//')
+	contents="$contents"");"
+	printf "%s\\r\\n\\r\\n" "$contents" >> "$2"
+}
+
+#$1varible name $2 filename $3 rawStatsFile $4 on fields to add
+WriteUnboundStats_ToJS(){
+	outputvar="$1"
+	inputfile="$3"
+	outputfile="$2"
+	outputlist=""
+	shift;shift;shift
+	for var in "$@"; do
+		item="$(awk -v pat="$var=" 'BEGIN {FS="[= ]"}$0 ~ pat {print $2}' $inputfile)"
+		if [ -z "$outputlist" ]; then
+			outputlist=$item
+		else
+			outputlist=$outputlist", "$item
+		fi
+	done
+
+	{ echo "var $outputvar;"
+		echo "$outputvar = [];"
+		echo "${outputvar}.unshift($outputlist);"
+		echo; } >> "$outputfile"
+}
+
+#$1varible name $2 filename $3 on fields to add
+WriteUnboundLabels_ToJS(){
+	outputvar="$1"
+	outputfile="$2"
+	outputlist=""
+	shift;shift
+	for var in "$@"; do
+		if [ -z "$outputlist" ]; then
+			outputlist=\"$var\"
+		else
+			outputlist=$outputlist", "\"$var\"
+		fi
+	done
+
+	{ echo "var $outputvar;"
+		echo "$outputvar = [];"
+		echo "${outputvar}.unshift($outputlist);"
+		echo; } >> "$outputfile"
+}
+
+
+#$1 fieldname $2 tablename $3 frequency (hours) $4 length (days) $5 outputfile $6 sqlfile
+WriteSql_ToFile(){
+	{
+		echo ".mode csv"
+		echo ".output $5"
+	} >> "$6"
+	COUNTER=0
+	timenow="$(date '+%s')"
+	until [ $COUNTER -gt "$((24*$4/$3))" ]; do
+		echo "select $timenow - ((60*60*$3)*($COUNTER)),IFNULL(avg([$1]),'NaN') from $2 WHERE ([Timestamp] >= $timenow - ((60*60*$3)*($COUNTER+1))) AND ([Timestamp] <= $timenow - ((60*60*$3)*$COUNTER));" >> "$6"
+		COUNTER=$((COUNTER + 1))
+	done
 }
 
 Generate_UnboundStats () {
@@ -72,7 +155,9 @@ Generate_UnboundStats () {
 	fi
 	
 	#calc % served by cache
-	printf "$(awk 'BEGIN {printf "\\n\\n Cache hit success percent: %0.2f", '$UNB_NUM_CH'*100/'$UNB_NUM_Q'}' )" >> $statsFile
+	UNB_CHP="$(awk 'BEGIN {printf "%0.2f", '$UNB_NUM_CH'*100/'$UNB_NUM_Q'}' )"
+	echo "Calculated Cache Hit Percentage: $UNB_CHP"
+	printf "$(awk 'BEGIN {printf "\\n\\n Cache hit success percent: %s", '$UNB_CHP'}' )" >> $statsFile
 	
 	#create JS file to be loaded by web page
 	WriteStats_ToJS "$statsFile" "$statsFileJS" "SetUnboundStats" "unboundstats"
@@ -80,7 +165,51 @@ Generate_UnboundStats () {
 	echo "Unbound Stats generated on $(date +"%c")" > $statsTitleFile
 	WriteStats_ToJS "$statsTitleFile" "$statsTitleFileJS" "SetUnboundStatsTitle" "unboundstatstitle"
 
+	#use SQLite to track % for graph
+	echo "Adding new value to DB..."
+	{
+		echo "CREATE TABLE IF NOT EXISTS [unboundstats] ([StatID] INTEGER PRIMARY KEY NOT NULL, [Timestamp] NUMERIC NOT NULL, [CacheHitPercent] REAL NOT NULL);"
+		echo "INSERT INTO unboundstats ([Timestamp],[CacheHitPercent]) values($(date '+%s'),$UNB_CHP);"
+	} > /tmp/unbound-stats.sql
+	
+	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+
+	echo "Calculating Daily data..."
+	{
+		echo ".mode csv"
+		echo ".output /tmp/unbound-chp-daily.csv"
+		echo "select [Timestamp],[CacheHitPercent] from unboundstats WHERE [Timestamp] >= (strftime('%s','now') - 86400);"
+	} > /tmp/unbound-stats.sql
+	
+	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+	rm -f /tmp/unbound-stats.sql
+
+	echo "Calculating Weekly and Monthly data..."
+	WriteSql_ToFile "CacheHitPercent" "unboundstats" 1 7 "/tmp/unbound-chp-weekly.csv" "/tmp/unbound-stats.sql"
+	WriteSql_ToFile "CacheHitPercent" "unboundstats" 3 30 "/tmp/unbound-chp-monthly.csv" "/tmp/unbound-stats.sql"
+	
+	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+	
+	rm -f "$statsCHPFileJS"
+	WriteData_ToJS "/tmp/unbound-chp-daily.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentDaily"
+	WriteData_ToJS "/tmp/unbound-chp-weekly.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentWeekly"
+	WriteData_ToJS "/tmp/unbound-chp-monthly.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentMonthly"
+
+	#generate data for histogram on performance
+	echo "Outputting histogram performance data..."
+	[ -f $statsHistogramFileJS ] && rm -f $statsHistogramFileJS
+	WriteUnboundStats_ToJS "barDataHistogram" $statsHistogramFileJS $raw_statsFile "histogram.000000.000000.to.000000.000001" "histogram.000000.000001.to.000000.000002" "histogram.000000.000002.to.000000.000004" "histogram.000000.000004.to.000000.000008" "histogram.000000.000008.to.000000.000016" "histogram.000000.000016.to.000000.000032" "histogram.000000.000032.to.000000.000064" "histogram.000000.000064.to.000000.000128" "histogram.000000.000128.to.000000.000256" "histogram.000000.000256.to.000000.000512" "histogram.000000.000512.to.000000.001024" "histogram.000000.001024.to.000000.002048" "histogram.000000.002048.to.000000.004096" "histogram.000000.004096.to.000000.008192" "histogram.000000.008192.to.000000.016384" "histogram.000000.016384.to.000000.032768" "histogram.000000.032768.to.000000.065536" "histogram.000000.065536.to.000000.131072" "histogram.000000.131072.to.000000.262144" "histogram.000000.262144.to.000000.524288" "histogram.000000.524288.to.000001.000000" "histogram.000001.000000.to.000002.000000" "histogram.000002.000000.to.000004.000000" "histogram.000004.000000.to.000008.000000" "histogram.000008.000000.to.000016.000000" "histogram.000016.000000.to.000032.000000" "histogram.000032.000000.to.000064.000000" "histogram.000064.000000.to.000128.000000" "histogram.000128.000000.to.000256.000000" "histogram.000256.000000.to.000512.000000" "histogram.000512.000000.to.001024.000000" "histogram.001024.000000.to.002048.000000" "histogram.002048.000000.to.004096.000000" "histogram.004096.000000.to.008192.000000" "histogram.008192.000000.to.016384.000000" "histogram.016384.000000.to.032768.000000" "histogram.032768.000000.to.065536.000000" "histogram.065536.000000.to.131072.000000" "histogram.131072.000000.to.262144.000000" "histogram.262144.000000.to.524288.000000"
+	WriteUnboundLabels_ToJS "barLabelsHistogram" $statsHistogramFileJS "0us - 1us" "1us - 2us" "2us - 4us" "4us - 8us" "8us - 16us" "16us - 32us" "32us - 64us" "64us - 128us" "128us - 256us" "256us - 512us" "512us - 1ms" "1ms - 2ms" "2ms - 4ms" "4ms - 8ms" "8ms - 16ms" "16ms - 32ms" "32ms - 65ms" "65ms - 131ms" "131ms - 262ms" "262ms - 524ms" "524ms - 1s" "1s - 2s" "2s - 4s" "4s - 8s" "8s - 16s" "16s - 32s" "32s - 1m" "1m - 2m" "2m - 4m" "4m - 8.5m" "8.5m - 17m" "17m - 34m" "34m - 1h" "1h - 2.3h" "2.3h - 4.5h" "4.5h - 9.1h" "9.1h - 18.2h" "18.2h - 36.4h" "36.4h - 72.6h" "72.8h - 145.6h"
+
+	#generate data for answers
+	echo "Outputting answers data..."
+	[ -f $statsAnswersFileJS ] && rm -f $statsAnswersFileJS
+	WriteUnboundStats_ToJS "barDataAnswers" $statsAnswersFileJS $raw_statsFile "num.answer.rcode.NOERROR" "num.answer.rcode.FORMERR" "num.answer.rcode.SERVFAIL" "num.answer.rcode.NXDOMAIN" "num.answer.rcode.NOTIMPL" "num.answer.rcode.REFUSED"
+	WriteUnboundLabels_ToJS "barLabelsAnswers" $statsAnswersFileJS "DNS Query completed successfully" "DNS Query Format Error" "Server failed to complete the DNS request" "Domain name does not exist  (including adblock if enabled)" "Function not implemented" "The server refused to answer for the query"
+
 	#cleanup temp files
+	rm -f "/tmp/unbound-"*".csv"
+	rm -f "/tmp/unbound-stats.sql"
 	[ -f $raw_statsFile ] && rm -f $raw_statsFile
 	[ -f $statsFile ] && rm -f $statsFile
 	[ -f $statsTitleFile ] && rm -f $statsTitleFile
@@ -179,7 +308,7 @@ Create_Dirs(){
 Get_WebUI_Page () {
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		page="$SCRIPT_WEBPAGE_DIR/user$i.asp"
-		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ]; then
+		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ] || [ "$(cat $installedMD5File)" = "$(md5sum < "$page")" ]; then
 			MyPage="user$i.asp"
 			return
 		fi
@@ -196,6 +325,8 @@ Mount_WebUI(){
 		fi
 		echo "Mounting $SCRIPT_NAME WebUI page as $MyPage" "$PASS"
 		cp -f "$SCRIPT_DIR/unboundstats_www.asp" "$SCRIPT_WEBPAGE_DIR/$MyPage"
+		echo "Saving MD5 of installed file $SCRIPT_DIR/unboundstats_www.asp to $installedMD5File"
+		md5sum < "$SCRIPT_DIR/unboundstats_www.asp" > $installedMD5File
 		
 		if [ ! -f "/tmp/index_style.css" ]; then
 			cp -f "/www/index_style.css" "/tmp/"
@@ -259,6 +390,14 @@ ScriptHeader(){
 	printf "		uninstall - Removes files needed for UI and stops stats update\\n"
 }
 
+Install_SQLite(){
+	if [ ! -f /opt/bin/sqlite3 ]; then
+		echo "Installing required version of sqlite3 from Entware" "$PASS"
+		opkg update
+		opkg install sqlite3-cli
+	fi
+}
+
 #Main loop
 if [ -z "$1" ]; then
 	ScriptHeader
@@ -267,11 +406,7 @@ fi
 
 case "$1" in
 	install)
-		#if [ ! -f /opt/bin/sqlite3 ]; then
-			#echo "Installing required version of sqlite3 from Entware" "$PASS"
-			#opkg update
-			#opkg install sqlite3-cli
-		#fi
+		Install_SQLite
 		Auto_Startup create
 		Auto_ServiceEvent create
 		Auto_Cron create
