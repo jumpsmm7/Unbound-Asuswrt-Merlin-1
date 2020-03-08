@@ -439,9 +439,9 @@ Install_Dependancies(){
 
 Wait_For_Unbound() {
 	echo "Checking if Unbound is running to generate stats..."
-        WAIT=31    #give 30 seconds or so for unbound to start 
+        WAIT=15    #give 15 seconds or so for unbound to start 
         I=0
-         while [ $I -lt $((WAIT-1)) ]
+         while [ $I -lt $((WAIT)) ]
             do
                 if [ ! -z "$(pidof unbound)" ]; then
 			break;
@@ -473,6 +473,7 @@ case "$1" in
 		Auto_Cron create
 		Mount_WebUI
 		Create_Dirs
+		Wait_For_Unbound
 		Generate_UnboundStats
 		exit 0
 	;;
