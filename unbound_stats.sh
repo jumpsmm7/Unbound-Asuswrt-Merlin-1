@@ -6,10 +6,11 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.0.1
+## by @juched v1.1.1
 ## with credit to @JackYaz for his shared scripts
 ## V1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
+## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -18,6 +19,11 @@ readonly SCRIPT_NAME_LOWER="unbound_stats.sh"
 readonly SCRIPT_WEB_DIR="$SCRIPT_WEBPAGE_DIR/$SCRIPT_NAME_LOWER"
 readonly SCRIPT_VERSION="v1.0.0"
 readonly SCRIPT_DIR="/jffs/addons/unbound"
+
+#needed for shared jy graph files from @JackYaz
+readonly SHARED_DIR="/jffs/addons/shared-jy"
+readonly SHARED_REPO="https://raw.githubusercontent.com/jackyaz/shared-jy/master"
+readonly SHARED_WEB_DIR="$SCRIPT_WEBPAGE_DIR/shared-jy"
 
 #define needed commands
 readonly UNBOUNCTRLCMD="unbound-control"
@@ -323,7 +329,7 @@ Mount_WebUI(){
 			echo "Unable to mount $SCRIPT_NAME WebUI page, exiting"
 			exit 1
 		fi
-		echo "Mounting $SCRIPT_NAME WebUI page as $MyPage" "$PASS"
+		echo "Mounting $SCRIPT_NAME WebUI page as $MyPage"
 		cp -f "$SCRIPT_DIR/unboundstats_www.asp" "$SCRIPT_WEBPAGE_DIR/$MyPage"
 		echo "Saving MD5 of installed file $SCRIPT_DIR/unboundstats_www.asp to $installedMD5File"
 		md5sum < "$SCRIPT_DIR/unboundstats_www.asp" > $installedMD5File
@@ -390,12 +396,60 @@ ScriptHeader(){
 	printf "		uninstall - Removes files needed for UI and stops stats update\\n"
 }
 
-Install_SQLite(){
+Download_File(){
+	/usr/sbin/curl -fsL --retry 3 "$1" -o "$2"
+}
+
+Install_Dependancies(){
+	#install SQLite if not installed
 	if [ ! -f /opt/bin/sqlite3 ]; then
-		echo "Installing required version of sqlite3 from Entware" "$PASS"
+		echo "Installing required version of sqlite3 from Entware"
 		opkg update
 		opkg install sqlite3-cli
 	fi
+
+	# make shared JY charts directory, and download if needed
+	if [ ! -f "$SHARED_DIR" ]; then
+		mkdir "$SHARED_DIR"
+		echo "Shared JY directory doesn't exist, let make it..."
+	fi
+	if [ ! -f "$SHARED_DIR/shared-jy.tar.gz.md5" ]; then
+		Download_File "$SHARED_REPO/shared-jy.tar.gz" "$SHARED_DIR/shared-jy.tar.gz"
+		Download_File "$SHARED_REPO/shared-jy.tar.gz.md5" "$SHARED_DIR/shared-jy.tar.gz.md5"
+		tar -xzf "$SHARED_DIR/shared-jy.tar.gz" -C "$SHARED_DIR"
+		rm -f "$SHARED_DIR/shared-jy.tar.gz"
+		echo "New version of shared-jy.tar.gz downloaded"
+	else
+		localmd5="$(cat "$SHARED_DIR/shared-jy.tar.gz.md5")"
+		remotemd5="$(curl -fsL --retry 3 "$SHARED_REPO/shared-jy.tar.gz.md5")"
+		if [ "$localmd5" != "$remotemd5" ]; then
+			Download_File "$SHARED_REPO/shared-jy.tar.gz" "$SHARED_DIR/shared-jy.tar.gz"
+			Download_File "$SHARED_REPO/shared-jy.tar.gz.md5" "$SHARED_DIR/shared-jy.tar.gz.md5"
+			tar -xzf "$SHARED_DIR/shared-jy.tar.gz" -C "$SHARED_DIR"
+			rm -f "$SHARED_DIR/shared-jy.tar.gz"
+			echo "New version of shared-jy.tar.gz downloaded"
+		fi
+	fi
+
+	#Symlink the shared jy folder if it doesn't exist
+	if [ ! -d "$SHARED_WEB_DIR" ]; then
+		ln -s "$SHARED_DIR" "$SHARED_WEB_DIR" 2>/dev/null
+	fi
+}
+
+Wait_For_Unbound() {
+	echo "Checking if Unbound is running to generate stats..."
+        WAIT=31    #give 30 seconds or so for unbound to start 
+        I=0
+         while [ $I -lt $((WAIT-1)) ]
+            do
+                if [ ! -z "$(pidof unbound)" ]; then
+			break;
+		fi
+		echo "Unbound not running yet, try again $I..."
+                sleep 1
+                I=$((I + 1))
+            done  
 }
 
 #Main loop
@@ -406,7 +460,7 @@ fi
 
 case "$1" in
 	install)
-		Install_SQLite
+		Install_Dependancies
 		Auto_Startup create
 		Auto_ServiceEvent create
 		Auto_Cron create
@@ -424,8 +478,10 @@ case "$1" in
 	;;
 	generate)
 		if [ -z "$2" ] && [ -z "$3" ]; then
+			Wait_For_Unbound
 			Generate_UnboundStats
 		elif [ "$2" = "start" ] && [ "$3" = "$SCRIPT_NAME_LOWER" ]; then
+			Wait_For_Unbound
 			Generate_UnboundStats
 		fi
 		exit 0
