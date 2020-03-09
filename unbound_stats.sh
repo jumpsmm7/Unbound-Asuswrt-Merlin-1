@@ -6,11 +6,12 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.1.1
+## by @juched v1.1.2
 ## with credit to @JackYaz for his shared scripts
 ## V1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 ## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
+## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -38,6 +39,9 @@ statsCHPFileJS="$SCRIPT_WEB_DIR/unboundchpstats.js"
 statsHistogramFileJS="$SCRIPT_WEB_DIR/unboundhistogramstats.js"
 statsAnswersFileJS="$SCRIPT_WEB_DIR/unboundanswersstats.js"
 adblockStatsFile="/opt/var/lib/unbound/adblock/stats.txt"
+
+#DB file to hold data for uptime graph
+dbStats="$SCRIPT_DIR/unboundstats.db"
 
 #save md5 of last installed www ASP file so you can find it again later (in case of www ASP update)
 installedMD5File="$SCRIPT_DIR/www-installed.md5"
@@ -178,7 +182,7 @@ Generate_UnboundStats () {
 		echo "INSERT INTO unboundstats ([Timestamp],[CacheHitPercent]) values($(date '+%s'),$UNB_CHP);"
 	} > /tmp/unbound-stats.sql
 	
-	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+	"$SQLITE3_PATH" "$dbStats" < /tmp/unbound-stats.sql
 
 	echo "Calculating Daily data..."
 	{
@@ -187,14 +191,14 @@ Generate_UnboundStats () {
 		echo "select [Timestamp],[CacheHitPercent] from unboundstats WHERE [Timestamp] >= (strftime('%s','now') - 86400);"
 	} > /tmp/unbound-stats.sql
 	
-	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+	"$SQLITE3_PATH" "$dbStats" < /tmp/unbound-stats.sql
 	rm -f /tmp/unbound-stats.sql
 
 	echo "Calculating Weekly and Monthly data..."
 	WriteSql_ToFile "CacheHitPercent" "unboundstats" 1 7 "/tmp/unbound-chp-weekly.csv" "/tmp/unbound-stats.sql"
 	WriteSql_ToFile "CacheHitPercent" "unboundstats" 3 30 "/tmp/unbound-chp-monthly.csv" "/tmp/unbound-stats.sql"
 	
-	"$SQLITE3_PATH" "$SCRIPT_DIR/unboundstats.db" < /tmp/unbound-stats.sql
+	"$SQLITE3_PATH" "$dbStats" < /tmp/unbound-stats.sql
 	
 	rm -f "$statsCHPFileJS"
 	WriteData_ToJS "/tmp/unbound-chp-daily.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentDaily"
@@ -224,25 +228,25 @@ Generate_UnboundStats () {
 Auto_Startup(){
 	case $1 in
 		create)
-			if [ -f /jffs/scripts/services-start ]; then
-				STARTUPLINECOUNTEX=$(grep -cx "/jffs/addons/unbound/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" /jffs/scripts/services-start)
+			if [ -f /jffs/scripts/post-mount ]; then
+				STARTUPLINECOUNTEX=$(grep -cx "$SCRIPT_DIR/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" /jffs/scripts/post-mount)
 				
 				if [ "$STARTUPLINECOUNTEX" -eq 0 ]; then
-					echo "/jffs/addons/unbound/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/services-start
+					echo "$SCRIPT_DIR/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
 				fi
 			else
-				echo "#!/bin/sh" > /jffs/scripts/services-start
-				echo "" >> /jffs/scripts/services-start
-				echo "/jffs/scripts/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/services-start
-				chmod 0755 /jffs/scripts/services-start
+				echo "#!/bin/sh" > /jffs/scripts/post-mount
+				echo "" >> /jffs/scripts/post-mount
+				echo "/jffs/scripts/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
+				chmod 0755 /jffs/scripts/post-mount
 			fi
 		;;
 		delete)
-			if [ -f /jffs/scripts/services-start ]; then
-				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/services-start)
+			if [ -f /jffs/scripts/post-mount ]; then
+				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/post-mount)
 				
 				if [ "$STARTUPLINECOUNT" -gt 0 ]; then
-					sed -i -e '/# '"$SCRIPT_NAME"'/d' /jffs/scripts/services-start
+					sed -i -e '/# '"$SCRIPT_NAME"'/d' /jffs/scripts/post-mount
 				fi
 			fi
 		;;
@@ -255,7 +259,7 @@ Auto_Cron(){
 			STARTUPLINECOUNT=$(cru l | grep -c "$SCRIPT_NAME")
 			
 			if [ "$STARTUPLINECOUNT" -eq 0 ]; then
-				cru a "$SCRIPT_NAME" "59 * * * * /jffs/addons/unbound/$SCRIPT_NAME_LOWER generate"
+				cru a "$SCRIPT_NAME" "59 * * * * $SCRIPT_DIR/$SCRIPT_NAME_LOWER generate"
 			fi
 		;;
 		delete)
@@ -273,11 +277,11 @@ Auto_ServiceEvent(){
 		create)
 			if [ -f /jffs/scripts/service-event ]; then
 				# shellcheck disable=SC2016
-				STARTUPLINECOUNTEX=$(grep -cx "/jffs/addons/unbound/$SCRIPT_NAME_LOWER generate"' "$1" "$2" &'' # '"$SCRIPT_NAME" /jffs/scripts/service-event)
+				STARTUPLINECOUNTEX=$(grep -cx "$SCRIPT_DIR/$SCRIPT_NAME_LOWER generate"' "$1" "$2" &'' # '"$SCRIPT_NAME" /jffs/scripts/service-event)
 				
 				if [ "$STARTUPLINECOUNTEX" -eq 0 ]; then
 					# shellcheck disable=SC2016
-					echo "/jffs/addons/unbound/$SCRIPT_NAME_LOWER generate"' "$1" "$2" &'' # '"$SCRIPT_NAME" >> /jffs/scripts/service-event
+					echo "$SCRIPT_DIR/$SCRIPT_NAME_LOWER generate"' "$1" "$2" &'' # '"$SCRIPT_NAME" >> /jffs/scripts/service-event
 			fi
 			else
 				echo "#!/bin/sh" > /jffs/scripts/service-event
@@ -409,9 +413,9 @@ Install_Dependancies(){
 	fi
 
 	# make shared JY charts directory, and download if needed
-	if [ ! -f "$SHARED_DIR" ]; then
+	if [ ! -d "$SHARED_DIR" ]; then
+		echo "Shared JY directory doesn't exist, let's make it..."
 		mkdir "$SHARED_DIR"
-		echo "Shared JY directory doesn't exist, let make it..."
 	fi
 	if [ ! -f "$SHARED_DIR/shared-jy.tar.gz.md5" ]; then
 		Download_File "$SHARED_REPO/shared-jy.tar.gz" "$SHARED_DIR/shared-jy.tar.gz"
@@ -492,6 +496,8 @@ case "$1" in
 		Auto_ServiceEvent delete
 		Auto_Cron delete
 		Unmount_WebUI
+		[ -f $installedMD5File ] && rm -f $installedMD5File
+		[ -f $dbStats ] &&  rm -f $dbStats
 		exit 0
 	;;
 esac
