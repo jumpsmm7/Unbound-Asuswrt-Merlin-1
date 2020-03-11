@@ -3,14 +3,13 @@
 # AdBlock Script to download from customizable lists and merge into unbound rules file.
 # Use permlist file in same folder to add per line domains you want to whitelist.
 # Use blocklist file in same folder to block per line domains you want to block.
-# Use sites file to create list of sites/URLs you want to download from and merge.
-# File is in the format of 1 site/URL per line with two parts.
-#	<type> <URL>
-#	type can be one of:
-#		domains - for blocklists of the format of 1 domain per line
-#		hosts - for blocklists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
-#		whitelist-domains - for whitelists of the format of 1 domain per line
-#
+# Use blocksites file to create list of sites/URLs you want to download for blocklist.
+# Use allowsites file to create list of sites/URLs you want to download for whitelist.
+# File is in the format of 1 site/URL per line with two lists.
+#	<URL>
+# list format can be one of any:
+#		domains - for lists of the format of 1 domain per line
+#		hosts - for lists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
 # @juched - v1.0.3
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
 # v1.0.1 - moved config to /opt/share/unbound/configs
