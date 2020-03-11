@@ -21,18 +21,18 @@
 destinationIP="0.0.0.0"
 
 #adblock function paths
-tempoutlist="/opt/var/lib/unbound/adblock/adlist.tmp"
-tempwhitelistoutlist="/opt/var/lib/unbound/adblock/whitelist.tmp"
-outlist='/opt/var/lib/unbound/adblock/tmp.host'
-finalist='/opt/var/lib/unbound/adblock/tmp.finalhost'
+tempoutlist="/opt/var/lib/unbound/adblock/adlist"
+tempwhitelistoutlist="/opt/var/lib/unbound/adblock/whitelist"
+outlist='/opt/var/lib/unbound/adblock/outlist'
+finalist='/opt/var/lib/unbound/adblock/finalist'
 permlist='/opt/var/lib/unbound/adblock/permlist'
 adlist='/opt/var/lib/unbound/adblock/adservers'
 
 #user settings paths
 blocklist='/opt/share/unbound/configs/blockhost'
-allowlist='/opt/share/unbound/configs/allowlist'
-sites='/opt/share/unbound/configs/sites'
-
+allowlist='/opt/share/unbound/configs/allowhost'
+blocksites='/opt/share/unbound/configs/blocksites'
+allowsites='/opt/share/unbound/configs/allowsites'
 #used to write out stats in case people want to see
 statsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
@@ -43,53 +43,52 @@ echo "Removing possible temporary files.."
 [ -f $finalist ] && rm -f $finalist
 
 # check for sites file
-if [ ! -f $sites ]; then
-  logger -st "($(basename $0))" "Missing $sites file"
+if [ ! -f $blocksites ]; then
+  logger -st "($(basename $0))" "Missing $blocksites file"
   exit
 fi
 
-# process sites list
-while read -r line
-do
+# process blocksites list
+download_file () {
+  sites=$1
+  list=$2
+  while read -r line
+  do
   set -- $line
-  if [ "$2" != "" ]; then
-    if [ "$1" == "hosts" ]; then
-      echo "Processsing hosts file @ $2"
-      curl --progress-bar $2 | grep -v "#" | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $2}' | grep -v '^\\' | grep -v '\\$'| sort >> $tempoutlist
-    elif [ "$1" == "domains" ]; then
-     echo "Processing domains file @ $2"
-     curl --progress-bar $2 >> $tempoutlist
-    elif [ "$1" == "whitelist-domains" ]; then
-     echo "Processing whitelist domains file @ $2"
-     curl --progress-bar $2 >> $tempwhitelistoutlist
-    else
-      echo "Unknown file type = $1"
-    fi
-  else
-    echo "Missing site URL on line $line"
-  fi
-done < "$sites"
+  for url in $(echo $line); do
+  echo "Attempting to Download $url"
+  curl --progress-bar $url | grep -v "#" | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -v '^\\' | grep -v '\\$'| sort >> $list
+  dos2unix -q $list
+  done
+  done < "$sites"
+}
 
-echo "Combining User Custom block host..."
-cat $blocklist >> $tempoutlist
+filter_file () {
+  filter=$1
+  original=$2
+  awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $filter $original | sort -u > ${original}.tmp
+  mv ${original}.tmp $original
+}
 
-if [ -f $tempwhitelistoutlist ]; then
-  echo "Removing any downloaded whitelist items..."
-  awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $tempwhitelistoutlist $tempoutlist > $outlist
-  mv $outlist $tempoutlist
-fi
+cleanup () { 
+  unclean=$1
+  output=$2
+  cat $unclean | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u > ${output}.tmp
+  mv ${output}.tmp $output
+  awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $output $unclean | sort -u > ${output}.tmp
+  mv ${output}.tmp $output
+  cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $3
+}
 
-echo "Filtering required domains from adblock list..."
-awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $allowhost $tempoutlist > $outlist
-
-echo "Filtering user requested domains from adblock list..."
-awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $permlist $tempoutlist > $outlist
-
-echo "Removing duplicate formatting from the domain list..."
-cat $outlist | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e '/^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\).*$/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $finalist
+download_file $blocksites $tempoutlist
+[ -f $allowsites ] && download_file $allowsites $tempwhitelistoutlist
+[ -f $blocklist ] && echo "Combining User Custom block host..." && cat $blocklist >> $tempoutlist
+[ -f $tempwhitelistoutlist ] && echo "Removing any downloaded whitelist items..." && filter_file $tempwhitelistoutlist $tempoutlist
+[ -f $allowlist ] && echo "Filtering required domains from adblock list..." && filter_file $allowlist $tempoutlist
+[ -f $permlist ] && echo "Filtering user requested domains from adblock list..." && filter_file $permlist $tempoutlist
+[ -f $tempoutlist ] && echo "Removing unnecessary formatting from the domain list..." && cleanup $tempoutlist $outlist $finalist
 numberOfAdsBlocked=$(wc -l < $outlist)
 echo "$numberOfAdsBlocked domains compiled"
-
 echo "Generating Unbound adlist....."
 awk '/^0.0.0.0/ {print "local-zone: \""$2"\" always_nxdomain"}' $finalist > $adlist
 numberOfAdsBlocked=$(wc -l < $adlist)
