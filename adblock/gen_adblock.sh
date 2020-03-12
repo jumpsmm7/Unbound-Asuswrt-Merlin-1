@@ -57,7 +57,7 @@ download_file () {
   for url in $(echo $line); do
   echo "Attempting to Download $url"
   curl --progress-bar $url | grep -v "#" | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -v '^\\' | grep -v '\\$'| sort >> $list
-  dos2unix -q $list
+  dos2unix $list
   done
   done < "$sites"
 }
