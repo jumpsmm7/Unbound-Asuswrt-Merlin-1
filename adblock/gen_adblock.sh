@@ -80,7 +80,7 @@ cleanup () {
 }
 
 download_file $blocksites $tempoutlist
-[ -f $allowsites ] && download_file $allowsites $tempwhitelistoutlist
+[ -f $allowsites ] && echo "Downloading User Allow List..." && download_file $allowsites $tempwhitelistoutlist
 [ -f $blocklist ] && echo "Combining User Custom block host..." && cat $blocklist >> $tempoutlist
 [ -f $tempwhitelistoutlist ] && echo "Removing any downloaded whitelist items..." && filter_file $tempwhitelistoutlist $tempoutlist
 [ -f $allowlist ] && echo "Filtering required domains from adblock list..." && filter_file $allowlist $tempoutlist
