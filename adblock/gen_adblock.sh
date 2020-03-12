@@ -10,12 +10,13 @@
 # list format can be one of any:
 #		domains - for lists of the format of 1 domain per line
 #		hosts - for lists of the format of 1 host file entry per line with 0.0.0.0 IP (sorry, no 127.0.0.1)
-# @juched - v1.0.3
+# @juched - v1.0.4
 # 	Special thanks to @Martineau @rgnldo @Jack_Yaz for setting up and hosting and thinking of this
 # v1.0.1 - moved config to /opt/share/unbound/configs
 #	 - save and reload unbound cache on restart
 # v1.0.2 - separated required domains from user editable domains for allow list
 # v1.0.3 - switched to use unbound_manager.sh restart to be more safe
+# v1.0.4 - cleanup and split of sites file by jumpsmm7 (Thank you!)
 
 destinationIP="0.0.0.0"
 
@@ -83,8 +84,8 @@ download_file $blocksites $tempoutlist
 [ -f $allowsites ] && echo "Downloading User Allow List..." && download_file $allowsites $tempwhitelistoutlist
 [ -f $blocklist ] && echo "Combining User Custom block host..." && cat $blocklist >> $tempoutlist
 [ -f $tempwhitelistoutlist ] && echo "Removing any downloaded whitelist items..." && filter_file $tempwhitelistoutlist $tempoutlist
-[ -f $allowlist ] && echo "Filtering required domains from adblock list..." && filter_file $allowlist $tempoutlist
-[ -f $permlist ] && echo "Filtering user requested domains from adblock list..." && filter_file $permlist $tempoutlist
+[ -f $allowlist ] && echo "Filtering user requested domains from adblock list..." && filter_file $allowlist $tempoutlist
+[ -f $permlist ] && echo "Filtering required domains from adblock list..." && filter_file $permlist $tempoutlist
 [ -f $tempoutlist ] && echo "Removing unnecessary formatting from the domain list..." && cleanup $tempoutlist $outlist $finalist
 numberOfAdsBlocked=$(wc -l < $outlist)
 echo "$numberOfAdsBlocked domains compiled"
