@@ -73,10 +73,15 @@ filter_file () {
 cleanup () { 
   unclean=$1
   output=$2
-  cat $unclean | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u > ${output}.tmp
-  mv ${output}.tmp $output
-  awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $output $unclean | sort -u > ${output}.tmp
-  mv ${output}.tmp $output
+  grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" $unclean | sort -u > ${output}.tmp
+  if [ "$(wc -l < ${output}.tmp)" -ne "0" ]; then
+    mv ${output}.tmp $output
+    awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $output $unclean | sort -u > ${output}.tmp
+    mv ${output}.tmp $output
+  else
+    rm -rf ${output}.tmp
+    mv $unclean $output
+  fi
   cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' > $3
 }
 
