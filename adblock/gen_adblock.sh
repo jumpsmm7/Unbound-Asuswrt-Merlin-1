@@ -76,7 +76,7 @@ cleanup () {
   mv ${output}.tmp $output
   awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $output $unclean | sort -u > ${output}.tmp
   mv ${output}.tmp $output
-  cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' | awk -v "IP=$destinationIP" '{sub(/\r$/,""); print IP" "$0}' > $3
+  cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' > $3
 }
 
 download_file $blocksites $tempoutlist
@@ -89,7 +89,7 @@ download_file $blocksites $tempoutlist
 numberOfAdsBlocked=$(wc -l < $outlist)
 echo "$numberOfAdsBlocked domains compiled"
 echo "Generating Unbound adlist....."
-awk '/^0.0.0.0/ {print "local-zone: \""$2"\" always_nxdomain"}' $finalist > $adlist
+awk '{print "local-zone: \""$1"\" always_nxdomain"}' $finalist > $adlist
 numberOfAdsBlocked=$(wc -l < $adlist)
 echo " Number of adblocked (ads/malware/tracker) and blacklisted domains: $numberOfAdsBlocked" > $statsFile
 echo " Last updated: $(date +"%c")" >> $statsFile
