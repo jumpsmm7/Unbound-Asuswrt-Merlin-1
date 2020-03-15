@@ -124,12 +124,12 @@ Say "Number of adblocked hosts: $numberOfHostsBlocked"
 echo " Number of adblocked (ads/malware/tracker) and blacklisted hosts: $numberOfHostsBlocked" > $statsFile
 echo " Last updated: $(date +"%c")" >> $statsFile
 
-echo "Generating Unbound unload/load lists..."
-unbound-control list_local_zones | grep "always_nxdomain" | grep -v "use-application-dns.net" | awk '{print ""$1""}' > $unloadlist
-awk '{print ""$1" always_nxdomain"}' $finalist > $loadlist
-
-echo "Loading/Unload Unbound local-zones to take effect..."
 if [ -n "$(pidof unbound)" ];then
+  echo "Generating Unbound unload/load lists..."
+  unbound-control list_local_zones | grep "always_nxdomain" | grep -v "use-application-dns.net" | awk '{print ""$1""}' > $unloadlist
+  awk '{print ""$1" always_nxdomain"}' $finalist > $loadlist
+
+  echo "Loading/Unload Unbound local-zones to take effect..."
   [ -f $unloadlist ] && unbound-control local_zones_remove < $unloadlist
   [ -f $loadlist ] && unbound-control local_zones < $loadlist
 else
