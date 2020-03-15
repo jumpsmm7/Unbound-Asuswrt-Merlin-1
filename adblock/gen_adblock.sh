@@ -21,7 +21,7 @@
 # v1.0.6 - Outout to logger as well, swich to reload command, skip commented out download lines, update adblock with using restart or reload
 
 Say(){
-   echo $@  | logger -st "($(basename $0))"
+   echo -e $$ $@  | logger -st "($(basename $0))"
 }
 
 echo "                             "
@@ -50,7 +50,7 @@ allowsites='/opt/share/unbound/configs/allowsites'
 #used to write out stats in case people want to see
 statsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
-Say "Removing possible temporary files.."
+echo "Removing possible temporary files.."
 [ -f $tempoutlist ] && rm -f $tempoutlist
 [ -f $tempwhitelistoutlist ] && rm -f $tempwhitelistoutlist
 [ -f $outlist ] && rm -f $outlist
@@ -60,7 +60,7 @@ Say "Removing possible temporary files.."
 
 # check for sites file
 if [ ! -f $blocksites ]; then
-  logger -st "($(basename $0))" "Missing $blocksites file"
+  Say "Missing $blocksites file"
   exit
 fi
 
@@ -74,7 +74,7 @@ download_file () {
     set -- $line
     for url in $(echo $line); do
       [ "${url:0:1}" == "#" ] && continue # skip commented out lines - Thanks @Martineau
-      Say "Attempting to Download $count of $(wc -l < $sites) from $url."
+      echo "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sites | wc -l) from $url."
       curl --progress-bar $url | grep -o '^[^#]*' | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -o '^[^\\]*' | grep -o '^[^\\$]*' | sort >> $list
       dos2unix $list
     done
@@ -89,7 +89,7 @@ filter_file () {
     awk 'NR==FNR{a[$0];next} !($0 in a) {print $NF}' $filter $original | sort -u > ${original}.tmp
     mv ${original}.tmp $original
   else
-    Say "No filtering from $filter required for $original..."
+    echo "No filtering from $filter required for $original..."
   fi
 }
 
@@ -108,35 +108,35 @@ cleanup () {
   cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' > $3
 }
 
-Say "Downloading list(s) from block site(s) configured..."
+echo "Downloading list(s) from block site(s) configured..."
 download_file $blocksites $tempoutlist
-[ -f $allowsites ] && Say "Downloading list(s) from allow site(s) configured..." && download_file $allowsites $tempwhitelistoutlist
-[ -f $blocklist ] && Say "Adding user requested hosts to list..." && cat $blocklist >> $tempoutlist
-[ -f $tempwhitelistoutlist ] && Say "Removing allow list downloaded whitelist hosts from list..." && filter_file $tempwhitelistoutlist $tempoutlist
-[ -f $allowlist ] && Say "Removing user requested hosts from list..." && filter_file $allowlist $tempoutlist
-[ -f $permlist ] && Say "Removing required hosts from list..." && filter_file $permlist $tempoutlist
-[ -f $tempoutlist ] && Say "Removing unnecessary formatting from the domain list..." && cleanup $tempoutlist $outlist $finalist
+[ -f $allowsites ] && echo "Downloading list(s) from allow site(s) configured..." && download_file $allowsites $tempwhitelistoutlist
+[ -f $blocklist ] && echo "Adding user requested hosts to list..." && cat $blocklist >> $tempoutlist
+[ -f $tempwhitelistoutlist ] && echo "Removing allow list downloaded whitelist hosts from list..." && filter_file $tempwhitelistoutlist $tempoutlist
+[ -f $allowlist ] && echo "Removing user requested hosts from list..." && filter_file $allowlist $tempoutlist
+[ -f $permlist ] && echo "Removing required hosts from list..." && filter_file $permlist $tempoutlist
+[ -f $tempoutlist ] && echo "Removing unnecessary formatting from the domain list..." && cleanup $tempoutlist $outlist $finalist
 
-Say "Generating Unbound adservers file..."
+echo "Generating Unbound adservers file..."
 awk '{print "local-zone: \""$1"\" always_nxdomain"}' $finalist > $adlist
 numberOfHostsBlocked=$(wc -l < $adlist)
 Say "Number of adblocked hosts: $numberOfHostsBlocked"
 echo " Number of adblocked (ads/malware/tracker) and blacklisted hosts: $numberOfHostsBlocked" > $statsFile
 echo " Last updated: $(date +"%c")" >> $statsFile
 
-Say "Generating Unbound unload/load lists..."
+echo "Generating Unbound unload/load lists..."
 unbound-control list_local_zones | grep "always_nxdomain" | grep -v "use-application-dns.net" | awk '{print ""$1""}' > $unloadlist
 awk '{print ""$1" always_nxdomain"}' $finalist > $loadlist
 
-Say "Loading/Unload Unbound local-zones to take effect..."
+echo "Loading/Unload Unbound local-zones to take effect..."
 if [ -n "$(pidof unbound)" ];then
   [ -f $unloadlist ] && unbound-control local_zones_remove < $unloadlist
   [ -f $loadlist ] && unbound-control local_zones < $loadlist
 else
-  Say "Warning unbound NOT running"
+  Say "Warning unbound NOT running!"
 fi 
 
-Say "Removing temporary files..."
+echo "Removing temporary files..."
 [ -f $tempoutlist ] && rm -f $tempoutlist
 [ -f $tempwhitelistoutlist ] && rm -f $tempwhitelistoutlist
 [ -f $outlist ] && rm -f $outlist
@@ -144,4 +144,4 @@ Say "Removing temporary files..."
 [ -f $unloadlist ] && rm -f $unloadlist
 [ -f $loadlist ] && rm -f $loadlist
 
-Say "Adblock update complete!"
+echo "Adblock update complete!"
