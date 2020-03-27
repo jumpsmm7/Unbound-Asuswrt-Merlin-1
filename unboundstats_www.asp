@@ -23,6 +23,44 @@ font-weight: bolder;
   text-align: left;
   outline: none;
   cursor: pointer;
+}	
+
+th.keystatsnumber {
+  font-size: 20px !important;
+  font-weight: bolder !important;
+}
+
+.StatsTable {
+  table-layout: fixed !important;
+  width: 747px !important;
+  text-align: center !important;
+}
+.StatsTable th {
+  background-color:#1F2D35 !important;
+  background:#2F3A3E !important;
+  border-bottom:none !important;
+  border-top:none !important;
+  font-size: 12px !important;
+  color: white !important;
+  padding: 4px !important;
+  width: 740px !important;
+}
+.StatsTable td {
+  padding: 2px !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+.StatsTable a {
+  font-weight: bolder !important;
+  text-decoration: underline !important;
+}
+.StatsTable th:first-child,
+.StatsTable td:first-child {
+  border-left: none !important;
+}
+.StatsTable th:last-child ,
+.StatsTable td:last-child {
+  border-right: none !important;
 }
 
 </style>
@@ -45,6 +83,9 @@ font-weight: bolder;
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundchpstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundhistogramstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundanswersstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtopblockedstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtoprepliesstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unbounddailyreplies.js"></script>
 
 
 <script>
@@ -92,8 +133,8 @@ var datafilterPlugin = {
 }
 </script>
 <script>
-var BarChartHistogram, BarChartAnswers;
-var charttypehistogram, charttypeanswers;
+var BarChartHistogram, BarChartAnswers, BarChartTopBlocked, BarChartTopReplies;
+var charttypehistogram, charttypeanswers, charttypetopblocked, charttypetopreplies;
 var ShowLines=GetCookie("ShowLines");
 var ShowFill=GetCookie("ShowFill");
 Chart.defaults.global.defaultFontColor = "#CCC";
@@ -372,21 +413,55 @@ function initial(){
 	GetCookieNew("charttypehistogram",1);
 	GetCookieNew("colouranswers",0);
 	GetCookieNew("charttypeanswers",2);
+	GetCookieNew("colourtopblocked",0);
+	GetCookieNew("charttypetopblocked",0);
 	SetCurrentPage();
 	show_menu();
 	SetUnboundStats();
 	SetUnboundStatsTitle();
+
+	// redraw the CPH graphs
 	RedrawAllCharts();
-	Draw_Histogram_Chart();
+	// change layouts which will setup types and then redraw graphs
 	changeLayout(E('charttypehistogram'),"BarChartHistogram","charttypehistogram");
-	Draw_Answers_Chart();
 	changeLayout(E('charttypeanswers'),"BarChartAnswers","charttypeanswers");
+	changeLayout(E('charttypetopblocked'),"BarChartTopBlocked","charttypetopblocked");
+	changeLayout(E('charttypetopreplies'),"BarChartTopReplies","charttypetopreplies");
+
+	// load replies table
+	LoadDailyRepliesTable();
 
 	$("thead").click(function(){
 		$(this).siblings().toggle("fast");
 	})
 	
 	$(".default-collapsed").trigger("click");
+}
+
+function get_BarChart(name) {
+	if ("ChartHistogram" == name) {
+		return BarChartHistogram;
+	} else if ("ChartAnswers" == name) {
+		return BarChartAnswers;
+	} else if ("ChartTopBlocked" == name) {
+		return BarChartTopBlocked;
+	} else if ("ChartTopReplies" == name) {
+		return BarChartTopReplies;
+	} else {
+		return NULL;
+	}
+}
+
+function set_BarChart(name, value) {
+	if ("ChartHistogram" == name) {
+		BarChartHistogram = value;
+	} else if ("ChartAnswers" == name) {
+		BarChartAnswers = value;
+	} else if ("ChartTopBlocked" == name) {
+		BarChartTopBlocked = value;;
+	} else if ("ChartTopReplies" == name) {
+		BarChartTopReplies = value;;
+	}
 }
 
 function reload() {
@@ -401,13 +476,14 @@ function applyRule() {
 	document.form.submit();
 }
 
-function Draw_Histogram_Chart() {
-	if(typeof barLabelsHistogram === 'undefined' || barLabelsHistogram === null || (Array.isArray(barLabelsHistogram) && barLabelsHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if(typeof barDataHistogram === 'undefined' || barDataHistogram === null || (Array.isArray(barDataHistogram) && barDataHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if (barLabelsHistogram.length == 0) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if (BarChartHistogram != undefined) BarChartHistogram.destroy();
-	var ctx = document.getElementById("ChartHistogram").getContext("2d");
-	var barOptionsHistogram = {
+function Draw_Bar_Chart(barLabels, barData, ChartName, charttype, colourtag) {
+	if(typeof barLabels === 'undefined' || barLabels === null || (Array.isArray(barLabels) && barLabels.length == 0)) { Draw_Chart_NoData(ChartName); return; }
+	if(typeof barData === 'undefined' || barData === null || (Array.isArray(barData) && barData.length == 0)) { Draw_Chart_NoData(ChartName); return; }
+	if (barLabels.length == 0) { Draw_Chart_NoData(ChartName); return; }
+	var BarChartName = get_BarChart(ChartName);
+	if (BarChartName != undefined) BarChartName.destroy();
+	var ctx = document.getElementById(ChartName).getContext("2d");
+	var barOptions = {
 		segmentShowStroke : false,
 		segmentStrokeColor : "#000",
 		animationEasing : "easeOutQuart",
@@ -427,144 +503,62 @@ function Draw_Histogram_Chart() {
 		},
 		scales: {
 			xAxes: [{
-				display: showAxis(charttypehistogram,"x"),
-				gridLines: { display: showGrid(charttypehistogram,"x"), color: "#282828" },
-				ticks: { display: showAxis(charttypehistogram,"x"), beginAtZero: false }
+				display: showAxis(charttype,"x"),
+				gridLines: { display: showGrid(charttype,"x"), color: "#282828" },
+				ticks: { display: showAxis(charttype,"x"), beginAtZero: false }
 			}],
 			yAxes: [{
-				display: showAxis(charttypehistogram,"y"),
+				display: showAxis(charttype,"y"),
 				gridLines: { display: false, color: "#282828" },
 				scaleLabel: { display: false, labelString: "Blocks" },
-				ticks: { display: showAxis(charttypehistogram,"y"), beginAtZero: false }
+				ticks: { display: showAxis(charttype,"y"), beginAtZero: false }
 			}]
 		},
 		plugins: {
 			zoom: {
 				pan: {
 					enabled: true,
-					mode: ZoomPanEnabled(charttypehistogram),
+					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
 						y: 0
 					},
 					rangeMax: {
-						x: ZoomPanMax(charttypehistogram,"x",barDataHistogram),
-						y: ZoomPanMax(charttypehistogram,"y",barDataHistogram)
+						x: ZoomPanMax(charttype,"x",barData),
+						y: ZoomPanMax(charttype,"y",barData)
 					},
 				},
 				zoom: {
 					enabled: true,
-					mode: ZoomPanEnabled(charttypehistogram),
+					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
 						y: 0
 					},
 					rangeMax: {
-						x: ZoomPanMax(charttypehistogram,"x",barDataHistogram),
-						y: ZoomPanMax(charttypehistogram,"y",barDataHistogram)
+						x: ZoomPanMax(charttype,"x",barData),
+						y: ZoomPanMax(charttype,"y",barData)
 					},
 					speed: 0.1,
 				}
 			}
 		}
 	};
-	var barDatasetHistogram = {
-		labels: barLabelsHistogram,
-		datasets: [{data: barDataHistogram,
+	var barDataset = {
+		labels: barLabels,
+		datasets: [{data: barData,
 			borderWidth: 1,
-			backgroundColor: poolColors(barDataHistogram.length),
+			backgroundColor: poolColors(barData.length),
 			borderColor: "#000000",
 		}]
 	};
-	BarChartHistogram = new Chart(ctx, {
-		type: getChartType(charttypehistogram),
-		options: barOptionsHistogram,
-		data: barDatasetHistogram
+	BarChartName = new Chart(ctx, {
+		type: getChartType(charttype),
+		options: barOptions,
+		data: barDataset
 	});
-	changeColour(E('colourhistogram'),BarChartHistogram,barDataHistogram,"colourhistogram")
-}
-
-function Draw_Answers_Chart() {
-	if(typeof barLabelsAnswers === 'undefined' || barLabelsAnswers === null || (Array.isArray(barLabelsAnswers) && barLabelsAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if(typeof barDataAnswers === 'undefined' || barDataAnswers === null || (Array.isArray(barDataAnswers) && barDataAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if (barLabelsAnswers.length == 0) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if (BarChartAnswers != undefined) BarChartAnswers.destroy();
-	var ctx = document.getElementById("ChartAnswers").getContext("2d");
-	var barOptionsAnswers = {
-		segmentShowStroke : false,
-		segmentStrokeColor : "#000",
-		animationEasing : "easeOutQuart",
-		animationSteps : 100,
-		maintainAspectRatio: false,
-		animateScale : true,
-		legend: { display: false, position: "bottom", onClick: null },
-		title: { display: false },
-		tooltips: {
-			callbacks: {
-				title: function (tooltipItem, data) { return data.labels[tooltipItem[0].index]; },
-				label: function (tooltipItem, data) { return comma(data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index]); },
-			},
-			mode: 'point',
-			position: 'cursor',
-			intersect: true
-		},
-		scales: {
-			xAxes: [{
-				display: showAxis(charttypeanswers,"x"),
-				gridLines: { display: showGrid(charttypeanswers,"x"), color: "#282828" },
-				ticks: { display: showAxis(charttypeanswers,"x"), beginAtZero: false }
-			}],
-			yAxes: [{
-				display: showAxis(charttypeanswers,"y"),
-				gridLines: { display: false, color: "#282828" },
-				scaleLabel: { display: false, labelString: "Blocks" },
-				ticks: { display: showAxis(charttypeanswers,"y"), beginAtZero: false }
-			}]
-		},
-		plugins: {
-			zoom: {
-				pan: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypeanswers),
-					rangeMin: {
-						x: 0,
-						y: 0
-					},
-					rangeMax: {
-						x: ZoomPanMax(charttypeanswers,"x",barDataAnswers),
-						y: ZoomPanMax(charttypeanswers,"y",barDataAnswers)
-					},
-				},
-				zoom: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypeanswers),
-					rangeMin: {
-						x: 0,
-						y: 0
-					},
-					rangeMax: {
-						x: ZoomPanMax(charttypeanswers,"x",barDataAnswers),
-						y: ZoomPanMax(charttypeanswers,"y",barDataAnswers)
-					},
-					speed: 0.1,
-				}
-			}
-		}
-	};
-	var barDatasetAnswers = {
-		labels: barLabelsAnswers,
-		datasets: [{data: barDataAnswers,
-			borderWidth: 1,
-			backgroundColor: poolColors(barDataAnswers.length),
-			borderColor: "#000000",
-		}]
-	};
-	BarChartAnswers = new Chart(ctx, {
-		type: getChartType(charttypeanswers),
-		options: barOptionsAnswers,
-		data: barDatasetAnswers
-	});
-	changeColour(E('colouranswers'),BarChartAnswers,barDataAnswers,"colouranswers")
+	set_BarChart(ChartName, BarChartName);
+	changeColour(E(colourtag),BarChartName,barData,colourtag)
 }
 
 function changeColour(e,chartname,datasetname,cookiename) {
@@ -588,6 +582,12 @@ function changeLayout(e,chartname,cookiename) {
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "horizontalBar";
 		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "horizontalBar";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "horizontalBar";
+		}
 
 	}
 	else if ( layout == 1 ) {
@@ -596,6 +596,12 @@ function changeLayout(e,chartname,cookiename) {
 		}
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "bar";
+		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "bar";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "bar";
 		}
 
 	}
@@ -606,14 +612,26 @@ function changeLayout(e,chartname,cookiename) {
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "pie";
 		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "pie";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "pie";
+		}
 
 	}
 	cookie.set(cookiename, layout, 31);
 	if ( chartname == "BarChartHistogram" ) {
-		Draw_Histogram_Chart();
+		Draw_Bar_Chart(barLabelsHistogram, barDataHistogram, "ChartHistogram", charttypehistogram, "colourhistogram");
 	}
-	if ( chartname == "BarChartAnswers" ) {
-		Draw_Answers_Chart();
+	else if ( chartname == "BarChartAnswers" ) {
+		Draw_Bar_Chart(barLabelsAnswers, barDataAnswers, "ChartAnswers", charttypeanswers, "colouranswers");
+	}
+	else if ( chartname == "BarChartTopBlocked" ) {
+		Draw_Bar_Chart(barLabelsTopBlocked, barDataTopBlocked, "ChartTopBlocked", charttypetopblocked, "colourtopblocked");
+	}
+	else if ( chartname == "BarChartTopReplies" ) {
+		Draw_Bar_Chart(barLabelsTopReplies, barDataTopReplies, "ChartTopReplies", charttypetopreplies, "colourtopreplies");
 	}
 
 }
@@ -878,7 +896,6 @@ function ZoomPanMax(charttype, axis, datasetname) {
 </tr>
 </table>
 
-
 <div style="line-height:10px;">&nbsp;</div>
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#4D595D" class="FormTable">
 <tr>
@@ -890,7 +907,99 @@ function ZoomPanMax(charttype, axis, datasetname) {
 </td>
 </tr>
 </table>
+
 <div style="line-height:10px;">&nbsp;</div>
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="topblocked">
+<tr>
+<td colspan="2">Top Ad-Blocked Domains (click to expand/collapse) - requires log-local-actions enabled</td>
+</tr>
+</thead>
+<tr>
+<th width="40%">Style for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeColour(this,BarChartTopBlocked,barDataTopBlocked,'colourtopblocked')" id="colourtopblocked">
+<option value="0">Colour</option>
+<option value="1">Plain</option>
+</select>
+</td>
+</tr>
+<tr>
+<th width="40%">Layout for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeLayout(this,'BarChartTopBlocked','charttypetopblocked')" id="charttypetopblocked">
+<option value="0">Horizontal</option>
+<option value="1">Vertical</option>
+<option value="2">Pie</option>
+</select>
+</td>
+</tr>
+<tr>
+<td colspan="2" style="padding: 2px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:735px;padding-left:5px;"><canvas id="ChartTopBlocked" height="360" /></div>
+</td>
+</tr>
+</table>
+
+<div style="line-height:10px;">&nbsp;</div>
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="topblocked">
+<tr>
+<td colspan="2">Top Reply Domains (click to expand/collapse) - requires log-replies enabled</td>
+</tr>
+</thead>
+<tr>
+<th width="40%">Style for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeColour(this,BarChartTopReplies,barDataTopReplies,'colourtopreplies')" id="colourtopreplies">
+<option value="0">Colour</option>
+<option value="1">Plain</option>
+</select>
+</td>
+</tr>
+<tr>
+<th width="40%">Layout for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeLayout(this,'BarChartTopReplies','charttypetopreplies')" id="charttypetopreplies">
+<option value="0">Horizontal</option>
+<option value="1">Vertical</option>
+<option value="2">Pie</option>
+</select>
+</td>
+</tr>
+<tr>
+<td colspan="2" style="padding: 2px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:735px;padding-left:5px;"><canvas id="ChartTopReplies" height="360" /></div>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible expanded">
+<tr><td colspan="2">Today DNS Replies (click to expand/collapse) - limited to 250, requires log-replies enabled</td></tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable StatsTable">
+	<col style="width:500px;">
+	<col style="width:120px;">
+	<col style="width:80px;">
+	<thead>
+	<tr>
+	<th class="keystatsnumber">Domain</th>
+	<th class="keystatsnumber">Return Code</th>
+	<th class="keystatsnumber">Count</th>
+	</tr>
+	</thead>
+
+	<tr id="DatadivTableDailyReplies" />	
+</table>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
 </td>
 </tr>
 </tbody>

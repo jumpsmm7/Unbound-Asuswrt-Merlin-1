@@ -6,19 +6,23 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.1.2
+## by @juched v1.2.0
 ## with credit to @JackYaz for his shared scripts
 ## V1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 ## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
+## v1.2.0 - March 23 2020 - Add output for top ad blocked graph top 10 and top domains - moved stats DB to USB
+## v1.2.1 - March 26 2020 - Added daily replies table
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
 readonly SCRIPT_NAME="Unbound_Stats.sh"
+readonly LOGSCRIPT_NAME="Unbound_Log.sh"
 readonly SCRIPT_NAME_LOWER="unbound_stats.sh"
+readonly LOGSCRIPT_NAME_LOWER="unbound_log.sh"
 readonly SCRIPT_WEB_DIR="$SCRIPT_WEBPAGE_DIR/$SCRIPT_NAME_LOWER"
-readonly SCRIPT_VERSION="v1.0.0"
+readonly SCRIPT_VERSION="v1.2.0"
 readonly SCRIPT_DIR="/jffs/addons/unbound"
 
 #needed for shared jy graph files from @JackYaz
@@ -38,10 +42,16 @@ statsTitleFileJS="$SCRIPT_WEB_DIR/unboundstatstitle.js"
 statsCHPFileJS="$SCRIPT_WEB_DIR/unboundchpstats.js"
 statsHistogramFileJS="$SCRIPT_WEB_DIR/unboundhistogramstats.js"
 statsAnswersFileJS="$SCRIPT_WEB_DIR/unboundanswersstats.js"
+statsTopBlockedFileJS="$SCRIPT_WEB_DIR/unboundtopblockedstats.js"
+statsTopRepliesFileJS="$SCRIPT_WEB_DIR/unboundtoprepliesstats.js"
+statsDailyRepliesFileJS="$SCRIPT_WEB_DIR/unbounddailyreplies.js"
+dailyRepliesCSVFile="$SCRIPT_WEB_DIR/unboundrepliestoday.csv"
 adblockStatsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
 #DB file to hold data for uptime graph
-dbStats="$SCRIPT_DIR/unboundstats.db"
+dbOldStats="$SCRIPT_DIR/unboundstats.db"
+dbStats="/opt/var/lib/unbound/unbound_stats.db"
+dbLogs="/opt/var/lib/unbound/unbound_log.db"
 
 #save md5 of last installed www ASP file so you can find it again later (in case of www ASP update)
 installedMD5File="$SCRIPT_DIR/www-installed.md5"
@@ -65,7 +75,7 @@ WriteData_ToJS(){
 	{
 	echo "var $3;"
 	echo "$3 = [];"; } >> "$2"
-	contents="$3"'.unshift('
+	contents="$3"'.unshift( '
 	while IFS='' read -r line || [ -n "$line" ]; do
 		if echo "$line" | grep -q "NaN"; then continue; fi
 		datapoint="{ x: moment.unix(""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
@@ -118,6 +128,79 @@ WriteUnboundLabels_ToJS(){
 		echo; } >> "$outputfile"
 }
 
+#$1sql table $2 label column $3 count column $4 limit count $5 csv file $6 sql file $7 where clasue if needed
+WriteUnboundSqlLog_ToFile(){
+	{
+		echo ".mode csv"
+		echo ".output $5"
+	} > "$6"
+	echo "SELECT $2, SUM($3) FROM $1 $7 GROUP BY $2 ORDER BY SUM($3) DESC LIMIT $4;" >> "$6"
+}
+
+#$1 csv file $2 js file $3 varLabel $4 varData
+WriteUnboundCSV_ToJS() {
+	labels="$3"'.unshift( '
+	values="$4"'.unshift( '
+	while IFS='' read -r line || [ -n "$line" ]; do
+		if echo "$line" | grep -q "NaN"; then continue; fi
+		labels="$labels""$(echo "$line" | awk 'BEGIN{FS=","}{ print "\x27" $1 "\x27" }' | awk '{$1=$1};1')"","
+		values="$values""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"","
+	done < "$1"
+	labels=$(echo "$labels" | sed 's/.$//')
+	labels="$labels"");"
+	values=$(echo "$values" | sed 's/.$//')
+	values="$values"");"
+
+	{
+	echo "var $3;"
+	echo "$3 = [];"; } >> "$2"
+	printf "%s\\r\\n\\r\\n" "$labels" >> "$2"
+	{
+	echo "var $4;"
+	echo "$4 = [];"; } >> "$2"
+	printf "%s\\r\\n\\r\\n" "$values" >> "$2"
+}
+
+#$1 csv file $2 js file $3 varLabel $4 varData
+WriteUnboundCSV_ToJS_2Labels() {
+	labels="$3"'.unshift( '
+	values="$4"'.unshift( '
+	while IFS='' read -r line || [ -n "$line" ]; do
+		if echo "$line" | grep -q "NaN"; then continue; fi
+		labels="$labels""$(echo "$line" | awk 'BEGIN{FS=","}{ print "\x27" $1 " (" $2 ")\x27" }' | awk '{$1=$1};1')"","
+		values="$values""$(echo "$line" | awk 'BEGIN{FS=","}{ print $3 }' | awk '{$1=$1};1')"","
+	done < "$1"
+	labels=$(echo "$labels" | sed 's/.$//')
+	labels="$labels"");"
+	values=$(echo "$values" | sed 's/.$//')
+	values="$values"");"
+
+	{
+	echo "var $3;"
+	echo "$3 = [];"; } >> "$2"
+	printf "%s\\r\\n\\r\\n" "$labels" >> "$2"
+	{
+	echo "var $4;"
+	echo "$4 = [];"; } >> "$2"
+	printf "%s\\r\\n\\r\\n" "$values" >> "$2"
+}
+
+#$1 csv file $2 JS file $3 JS func name $4 html tag
+WriteUnboundCSV_ToJS_Table() {
+	
+	[ -f $2 ] && rm -f "$2"
+	echo "function $3(){" >> "$2"
+	html='document.getElementById("'"$4"'").outerHTML="'
+	numLines="$(wc -l < $1)"
+	if [ "$numLines" -lt 1 ]; then
+		html="$html""<tr><td colspan="3" class="nodata">No data to display</td></tr>"
+	else
+		html="$html""$(cat "$1" | awk 'BEGIN{FS=","}{ print "<tr><td>" $1 "</td><td>" $2 "</td><td>" $3 "</td></tr> \\" }' | awk '{$1=$1};1')"
+	fi
+	html=${html%?}
+	html="$html"'"'
+	printf "%s}" "$html" >> "$2"
+} 
 
 #$1 fieldname $2 tablename $3 frequency (hours) $4 length (days) $5 outputfile $6 sqlfile
 WriteSql_ToFile(){
@@ -217,9 +300,31 @@ Generate_UnboundStats () {
 	WriteUnboundStats_ToJS "barDataAnswers" $statsAnswersFileJS $raw_statsFile "num.answer.rcode.NOERROR" "num.answer.rcode.FORMERR" "num.answer.rcode.SERVFAIL" "num.answer.rcode.NXDOMAIN" "num.answer.rcode.NOTIMPL" "num.answer.rcode.REFUSED"
 	WriteUnboundLabels_ToJS "barLabelsAnswers" $statsAnswersFileJS "DNS Query completed successfully" "DNS Query Format Error" "Server failed to complete the DNS request" "Domain name does not exist  (including adblock if enabled)" "Function not implemented" "The server refused to answer for the query"
 
+	#generate data for top blocked domains
+	echo "Outputting top blocked domains..."
+	[ -f $statsTopBlockedFileJS ] && rm -f $statsTopBlockedFileJS
+	WriteUnboundSqlLog_ToFile "nx_domains" "domain" "count" "10" "/tmp/unbound-tbd.csv" "/tmp/unbound-tbd.sql"
+	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-tbd.sql
+	WriteUnboundCSV_ToJS "/tmp/unbound-tbd.csv" "$statsTopBlockedFileJS" "barLabelsTopBlocked" "barDataTopBlocked"
+
+	#generate data for top 10 weekly replies from unbound
+	echo "Outputting top replies ..."
+	[ -f $statsTopRepliesFileJS ] && rm -f $statsTopRepliesFileJS
+	WriteUnboundSqlLog_ToFile "reply_domains" "domain, reply" "count" "10" "/tmp/unbound-topreplies.csv" "/tmp/unbound-topreplies.sql"
+	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-topreplies.sql
+	WriteUnboundCSV_ToJS_2Labels "/tmp/unbound-topreplies.csv" "$statsTopRepliesFileJS" "barLabelsTopReplies" "barDataTopReplies"
+
+	#generate daily replies CSV
+	[ -f $statsDailyRepliesFileJS ] && rm -f $statsDailyRepliesFileJS
+	whereString="WHERE date='""$(date '+%F')""'"
+	WriteUnboundSqlLog_ToFile "reply_domains" "domain, reply" "count" "250" "/tmp/unbound-dailyreplies.csv" "/tmp/unbound-dailyreplies.sql" "$whereString"
+	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-dailyreplies.sql
+	dos2unix "/tmp/unbound-dailyreplies.csv"
+	WriteUnboundCSV_ToJS_Table "/tmp/unbound-dailyreplies.csv" $statsDailyRepliesFileJS "LoadDailyRepliesTable" "DatadivTableDailyReplies"
+
 	#cleanup temp files
 	rm -f "/tmp/unbound-"*".csv"
-	rm -f "/tmp/unbound-stats.sql"
+	rm -f "/tmp/unbound-"*".sql"
 	[ -f $raw_statsFile ] && rm -f $raw_statsFile
 	[ -f $statsFile ] && rm -f $statsFile
 	[ -f $statsTitleFile ] && rm -f $statsTitleFile
@@ -261,12 +366,22 @@ Auto_Cron(){
 			if [ "$STARTUPLINECOUNT" -eq 0 ]; then
 				cru a "$SCRIPT_NAME" "59 * * * * $SCRIPT_DIR/$SCRIPT_NAME_LOWER generate"
 			fi
+			STARTUPLINECOUNT=$(cru l | grep -c "$LOGSCRIPT_NAME")
+			
+			if [ "$STARTUPLINECOUNT" -eq 0 ]; then
+				cru a "$LOGSCRIPT_NAME" "57 * * * * $SCRIPT_DIR/$LOGSCRIPT_NAME_LOWER"
+			fi
 		;;
 		delete)
 			STARTUPLINECOUNT=$(cru l | grep -c "$SCRIPT_NAME")
 			
 			if [ "$STARTUPLINECOUNT" -gt 0 ]; then
 				cru d "$SCRIPT_NAME"
+			fi
+			STARTUPLINECOUNT=$(cru l | grep -c "$LOGSCRIPT_NAME")
+			
+			if [ "$STARTUPLINECOUNT" -gt 0 ]; then
+				cru d "$LOGSCRIPT_NAME"
 			fi
 		;;
 	esac
@@ -312,6 +427,11 @@ Create_Dirs(){
 	
 	if [ ! -d "$SCRIPT_WEB_DIR" ]; then
 		mkdir -p "$SCRIPT_WEB_DIR"
+	fi
+
+	# migrate to USB key, to aviod using space on JFFs
+	if [ -f "$dbOldStats" ]; then
+		mv $dbOldStats $dbStats
 	fi
 }
 
@@ -498,6 +618,7 @@ case "$1" in
 		Unmount_WebUI
 		[ -f $installedMD5File ] && rm -f $installedMD5File
 		[ -f $dbStats ] &&  rm -f $dbStats
+		[ -f $dbLogs ] &&  rm -f $dbLogs
 		exit 0
 	;;
 esac
