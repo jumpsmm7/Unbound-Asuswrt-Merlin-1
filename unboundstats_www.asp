@@ -982,12 +982,14 @@ function ZoomPanMax(charttype, axis, datasetname) {
 <tr>
 <td colspan="2" align="center" style="padding: 0px;">
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable StatsTable">
-	<col style="width:500px;">
+	<col style="width:380px;">
+	<col style="width:120px;">
 	<col style="width:120px;">
 	<col style="width:80px;">
 	<thead>
 	<tr>
 	<th class="keystatsnumber">Domain</th>
+	<th class="keystatsnumber">Client IP</th>
 	<th class="keystatsnumber">Return Code</th>
 	<th class="keystatsnumber">Count</th>
 	</tr>

@@ -14,6 +14,7 @@
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
 ## v1.2.0 - March 23 2020 - Add output for top ad blocked graph top 10 and top domains - moved stats DB to USB
 ## v1.2.1 - March 26 2020 - Added daily replies table
+## v1.2.2 - Aoril 5 2020 - Added tracking of client ip
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -193,9 +194,9 @@ WriteUnboundCSV_ToJS_Table() {
 	html='document.getElementById("'"$4"'").outerHTML="'
 	numLines="$(wc -l < $1)"
 	if [ "$numLines" -lt 1 ]; then
-		html="$html""<tr><td colspan="3" class="nodata">No data to display</td></tr>"
+		html="$html""<tr><td colspan="4" class="nodata">No data to display</td></tr>"
 	else
-		html="$html""$(cat "$1" | awk 'BEGIN{FS=","}{ print "<tr><td>" $1 "</td><td>" $2 "</td><td>" $3 "</td></tr> \\" }' | awk '{$1=$1};1')"
+		html="$html""$(cat "$1" | awk 'BEGIN{FS=","}{ print "<tr><td>" $1 "</td><td>" $2 "</td><td>"$3 "</td><td>" $4 "</td></tr> \\" }' | awk '{$1=$1};1')"
 	fi
 	html=${html%?}
 	html="$html"'"'
@@ -317,7 +318,7 @@ Generate_UnboundStats () {
 	#generate daily replies CSV
 	[ -f $statsDailyRepliesFileJS ] && rm -f $statsDailyRepliesFileJS
 	whereString="WHERE date='""$(date '+%F')""'"
-	WriteUnboundSqlLog_ToFile "reply_domains" "domain, reply" "count" "250" "/tmp/unbound-dailyreplies.csv" "/tmp/unbound-dailyreplies.sql" "$whereString"
+	WriteUnboundSqlLog_ToFile "reply_domains" "domain, client_ip, reply" "count" "250" "/tmp/unbound-dailyreplies.csv" "/tmp/unbound-dailyreplies.sql" "$whereString"
 	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-dailyreplies.sql
 	dos2unix "/tmp/unbound-dailyreplies.csv"
 	WriteUnboundCSV_ToJS_Table "/tmp/unbound-dailyreplies.csv" $statsDailyRepliesFileJS "LoadDailyRepliesTable" "DatadivTableDailyReplies"
