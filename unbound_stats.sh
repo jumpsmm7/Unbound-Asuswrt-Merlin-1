@@ -6,7 +6,7 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.2.0
+## by @juched v1.2.3
 ## with credit to @JackYaz for his shared scripts
 ## V1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
@@ -15,6 +15,7 @@
 ## v1.2.0 - March 23 2020 - Add output for top ad blocked graph top 10 and top domains - moved stats DB to USB
 ## v1.2.1 - March 26 2020 - Added daily replies table
 ## v1.2.2 - Aoril 5 2020 - Added tracking of client ip
+## v1.2.3 - Aoril 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -188,7 +189,9 @@ WriteUnboundCSV_ToJS_2Labels() {
 
 #$1 csv file $2 JS file $3 JS func name $4 html tag
 WriteUnboundCSV_ToJS_Table() {
-	
+	#clean up any null (or "") strings with null string
+	sed -i 's/""/null/g' "$1"
+
 	[ -f $2 ] && rm -f "$2"
 	echo "function $3(){" >> "$2"
 	html='document.getElementById("'"$4"'").outerHTML="'
@@ -316,6 +319,7 @@ Generate_UnboundStats () {
 	WriteUnboundCSV_ToJS_2Labels "/tmp/unbound-topreplies.csv" "$statsTopRepliesFileJS" "barLabelsTopReplies" "barDataTopReplies"
 
 	#generate daily replies CSV
+	echo "Outputting daily replies ..."
 	[ -f $statsDailyRepliesFileJS ] && rm -f $statsDailyRepliesFileJS
 	whereString="WHERE date='""$(date '+%F')""'"
 	WriteUnboundSqlLog_ToFile "reply_domains" "domain, client_ip, reply" "count" "250" "/tmp/unbound-dailyreplies.csv" "/tmp/unbound-dailyreplies.sql" "$whereString"
