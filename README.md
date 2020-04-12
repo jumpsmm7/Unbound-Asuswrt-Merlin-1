@@ -1,13 +1,10 @@
 # Unbound-Asuswrt-Merlin
-Welcome to the unbound-Installer-Asuswrt-Merlin installation script by https://github.com/MartineauUK
 
-Requirements: USB drive with Entware installed
+This repo includes support files used by Unbound_Manager.sh maintained by MartineauUK.
+https://github.com/MartineauUK/Unbound-Asuswrt-Merlin
 
-The install script will:
-1. Install the unbound Entware package
-2. Override how the firmware manages DNS
-3. Disable the firmware DNSSEC setting
-
-You can also use this script to uninstall unbound to back out the changes made during the installation. See the project repository at
-https://github.com/rgnldo/Unbound-Asuswrt-Merlin for helpful tips.
-
+Includes scripts to support features like:
+- Nightly Adblock download script (controlled by allowsites & blocksites list files)
+- Unbound Add-on GUI page (with scripts to generate details hourly)
+- Script to generate SQLite file with DNS activity from the logs
+- DNS Firewall script to get security focused RPZ files quickly

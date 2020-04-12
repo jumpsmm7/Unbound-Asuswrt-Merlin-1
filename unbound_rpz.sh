@@ -2,8 +2,9 @@
 
 # Unbound-RPZ.sh - Quick DNS Firewall for unbound using RPZ sites (needs unbound 1.10.0+)
 # V1.0 - Initial quick release.  Run it once, it keeps running.  No installer.
+# V1.0.1 - Only reload if unbound is running
 
-echo "Unbound-RPZ.sh - V1.0 running..."
+echo "Unbound-RPZ.sh - V1.0.1 running..."
 
 download_reload () {
   sitesfile=$1
@@ -16,8 +17,10 @@ download_reload () {
     curl --progress-bar $1 > $2
     dos2unix $2
 
-    echo "Reload unbound for zone named $3"
-    unbound-control auth_zone_reload "$3"
+    if [ ! -z "$(pidof unbound)" ]; then
+      echo "Reload unbound for zone named $3"
+      unbound-control auth_zone_reload "$3"
+    fi
     count=$((count + 1))
   done < "$sitesfile"
 }
