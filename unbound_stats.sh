@@ -14,8 +14,9 @@
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
 ## v1.2.0 - March 23 2020 - Add output for top ad blocked graph top 10 and top domains - moved stats DB to USB
 ## v1.2.1 - March 26 2020 - Added daily replies table
-## v1.2.2 - Aoril 5 2020 - Added tracking of client ip
-## v1.2.3 - Aoril 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
+## v1.2.2 - April 5 2020 - Added tracking of client ip
+## v1.2.3 - April 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
+## v1.2.4 - April 12 2020 - Removed error message on clean install for missing md5 file
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -440,10 +441,17 @@ Create_Dirs(){
 	fi
 }
 
+Get_WebUI_Installed () {
+	md5_installed="0"
+	if [ -f $installedMD5File ]; then
+		md5_installed="$(cat $installedMD5File)"
+	fi
+}
+
 Get_WebUI_Page () {
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		page="$SCRIPT_WEBPAGE_DIR/user$i.asp"
-		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ] || [ "$(cat $installedMD5File)" = "$(md5sum < "$page")" ]; then
+		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ] || [ "$2" = "$(md5sum < "$page")" ]; then
 			MyPage="user$i.asp"
 			return
 		fi
@@ -453,7 +461,8 @@ Get_WebUI_Page () {
 
 Mount_WebUI(){
 	if nvram get rc_support | grep -qF "am_addons"; then
-		Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp"
+		Get_WebUI_Installed
+		Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp" "$md5_installed"
 		if [ "$MyPage" = "none" ]; then
 			echo "Unable to mount $SCRIPT_NAME WebUI page, exiting"
 			exit 1
@@ -496,7 +505,8 @@ Mount_WebUI(){
 }
 
 Unmount_WebUI(){
-	Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp"
+	Get_WebUI_Installed
+	Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp" "$md5_installed" 
 	echo "$MyPage"
 	if [ -n "$MyPage" ] && [ "$MyPage" != "none" ] && [ -f "/tmp/menuTree.js" ]; then
 		sed -i "\\~$MyPage~d" /tmp/menuTree.js
@@ -595,6 +605,7 @@ case "$1" in
 		Auto_Cron create
 		Mount_WebUI
 		Create_Dirs
+		sh /jffs/addons/unbound/unbound_log.sh
 		Generate_UnboundStats
 		exit 0
 	;;
