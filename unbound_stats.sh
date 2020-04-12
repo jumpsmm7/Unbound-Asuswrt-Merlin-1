@@ -12,6 +12,7 @@
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 ## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
+## v1.1.3 - April 12 2020 - Fix error message shown about missing md5 file during clean install
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -315,10 +316,17 @@ Create_Dirs(){
 	fi
 }
 
+Get_WebUI_Installed () {
+	md5_installed="0"
+	if [ -f $installedMD5File ]; then
+		md5_installed="$(cat $installedMD5File)"
+	fi
+}
+
 Get_WebUI_Page () {
 	for i in 1 2 3 4 5 6 7 8 9 10; do
 		page="$SCRIPT_WEBPAGE_DIR/user$i.asp"
-		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ] || [ "$(cat $installedMD5File)" = "$(md5sum < "$page")" ]; then
+		if [ ! -f "$page" ] || [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ] || [ "$2" = "$(md5sum < "$page")" ]; then
 			MyPage="user$i.asp"
 			return
 		fi
@@ -328,7 +336,8 @@ Get_WebUI_Page () {
 
 Mount_WebUI(){
 	if nvram get rc_support | grep -qF "am_addons"; then
-		Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp"
+		Get_WebUI_Installed
+		Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp" "$md5_installed"
 		if [ "$MyPage" = "none" ]; then
 			echo "Unable to mount $SCRIPT_NAME WebUI page, exiting"
 			exit 1
@@ -371,7 +380,8 @@ Mount_WebUI(){
 }
 
 Unmount_WebUI(){
-	Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp"
+	Get_WebUI_Installed
+	Get_WebUI_Page "$SCRIPT_DIR/unboundstats_www.asp" "$md5_installed" 
 	echo "$MyPage"
 	if [ -n "$MyPage" ] && [ "$MyPage" != "none" ] && [ -f "/tmp/menuTree.js" ]; then
 		sed -i "\\~$MyPage~d" /tmp/menuTree.js
