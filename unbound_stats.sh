@@ -17,6 +17,7 @@
 ## v1.2.2 - April 5 2020 - Added tracking of client ip
 ## v1.2.3 - April 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
 ## v1.2.4 - April 12 2020 - Removed error message on clean install for missing md5 file
+## v1.2.5 - April 13 2020 - During install, do not Generate stats if unbound is not running
 readonly SCRIPT_VERSION="v1.2.4"
 
 #define www script names
@@ -224,7 +225,12 @@ WriteSql_ToFile(){
 
 Generate_UnboundStats () {
 	#generate stats to raw file
-	printf "$(unbound-control stats_noreset)" > $raw_statsFile
+	if [ -n "$(pidof unbound)" ]; then 
+		printf "$($UNBOUNCTRLCMD stats_noreset)" > $raw_statsFile
+	else
+		#output empty data, cannot get new stats
+		cat /jffs/addons/unbound/emptystats > $raw_statsFile
+	fi
 	
 	#generate header
 	LINE=" --------------------------------------------------------\\n"
@@ -241,7 +247,7 @@ Generate_UnboundStats () {
 	printf "$(awk 'BEGIN {FS="[= ]"} /total.requestlist.avg=/ {print "\\n Average number of requests in list for recursive processing: " $2}' $raw_statsFile )" >> $statsFile
 	
 	#extended stats
-	if [ "$($UNBOUNCTRLCMD get_option extended-statistics)" == "yes" ];then 
+	if [ -n "$(pidof unbound)" ] && [ "$($UNBOUNCTRLCMD get_option extended-statistics)" == "yes" ];then 
 		printf "\\n\\n Extended Statistics\\n$LINE" >> $statsFile
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.rrset=/ {print "\\n RRset cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.message=/ {print "\\n Message cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
