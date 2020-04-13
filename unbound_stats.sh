@@ -6,9 +6,9 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.2.3
+## by @juched - Generate Stats for GUI tab
 ## with credit to @JackYaz for his shared scripts
-## V1.0.0 - initial text based only UI items
+## v1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 ## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
@@ -17,6 +17,7 @@
 ## v1.2.2 - April 5 2020 - Added tracking of client ip
 ## v1.2.3 - April 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
 ## v1.2.4 - April 12 2020 - Removed error message on clean install for missing md5 file
+readonly SCRIPT_VERSION="v1.2.4"
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -25,7 +26,7 @@ readonly LOGSCRIPT_NAME="Unbound_Log.sh"
 readonly SCRIPT_NAME_LOWER="unbound_stats.sh"
 readonly LOGSCRIPT_NAME_LOWER="unbound_log.sh"
 readonly SCRIPT_WEB_DIR="$SCRIPT_WEBPAGE_DIR/$SCRIPT_NAME_LOWER"
-readonly SCRIPT_VERSION="v1.2.0"
+
 readonly SCRIPT_DIR="/jffs/addons/unbound"
 
 #needed for shared jy graph files from @JackYaz
@@ -348,7 +349,7 @@ Auto_Startup(){
 			else
 				echo "#!/bin/sh" > /jffs/scripts/post-mount
 				echo "" >> /jffs/scripts/post-mount
-				echo "/jffs/scripts/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
+				echo "$SCRIPT_DIR/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
 				chmod 0755 /jffs/scripts/post-mount
 			fi
 		;;
@@ -526,7 +527,7 @@ ScriptHeader(){
 	printf "#|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ \\n"
 	printf "#|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >\\n"
 	printf "#             \/    \/                  \/      \/          \/           \/          \/ \\n"
-	printf "## by @juched %s                                                                    \\n" "$SCRIPT_VERSION"
+	printf "## by @juched - Generate Stats for GUI tab - %s                                         \\n" "$SCRIPT_VERSION"
 	printf "## with credit to @JackYaz for his shared scripts                                       \\n"
 	printf "\\n"
 	printf "unbound_stats.sh\\n"
