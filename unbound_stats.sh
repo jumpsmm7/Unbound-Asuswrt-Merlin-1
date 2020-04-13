@@ -6,20 +6,22 @@
 #|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ 
 #|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >
 #             \/    \/                  \/      \/          \/           \/          \/ 
-## by @juched v1.1.2
+## by @juched - Generate Stats for GUI tab
 ## with credit to @JackYaz for his shared scripts
-## V1.0.0 - initial text based only UI items
+## v1.0.0 - initial text based only UI items
 ## v1.1.0 - March 3 2020 - Added graphs for histogram and answers, fixed install to not create duplicate tabs
 ## v1.1.1 - March 8 2020 - Added new install of JackYaz shared graphing files (previously needed to have one of JackYaz's other plugins installed)
 ## v1.1.2 - March 9 2020 - Cleanup .db and .md5 files on uninstall, move startup to post-mount, fixed directory check
 ## v1.1.3 - April 12 2020 - Fix error message shown about missing md5 file during clean install
+## v1.1.4 - April 13 2020 - During install, do not Generate stats if unbound is not running, move db off jffs to USB Key
+readonly SCRIPT_VERSION="v1.1.4"
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
 readonly SCRIPT_NAME="Unbound_Stats.sh"
 readonly SCRIPT_NAME_LOWER="unbound_stats.sh"
 readonly SCRIPT_WEB_DIR="$SCRIPT_WEBPAGE_DIR/$SCRIPT_NAME_LOWER"
-readonly SCRIPT_VERSION="v1.0.0"
+
 readonly SCRIPT_DIR="/jffs/addons/unbound"
 
 #needed for shared jy graph files from @JackYaz
@@ -42,7 +44,8 @@ statsAnswersFileJS="$SCRIPT_WEB_DIR/unboundanswersstats.js"
 adblockStatsFile="/opt/var/lib/unbound/adblock/stats.txt"
 
 #DB file to hold data for uptime graph
-dbStats="$SCRIPT_DIR/unboundstats.db"
+dbOldStats="$SCRIPT_DIR/unboundstats.db"
+dbStats="/opt/var/lib/unbound/unbound_stats.db"
 
 #save md5 of last installed www ASP file so you can find it again later (in case of www ASP update)
 installedMD5File="$SCRIPT_DIR/www-installed.md5"
@@ -66,7 +69,7 @@ WriteData_ToJS(){
 	{
 	echo "var $3;"
 	echo "$3 = [];"; } >> "$2"
-	contents="$3"'.unshift('
+	contents="$3"'.unshift( '
 	while IFS='' read -r line || [ -n "$line" ]; do
 		if echo "$line" | grep -q "NaN"; then continue; fi
 		datapoint="{ x: moment.unix(""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
@@ -119,7 +122,6 @@ WriteUnboundLabels_ToJS(){
 		echo; } >> "$outputfile"
 }
 
-
 #$1 fieldname $2 tablename $3 frequency (hours) $4 length (days) $5 outputfile $6 sqlfile
 WriteSql_ToFile(){
 	{
@@ -136,7 +138,12 @@ WriteSql_ToFile(){
 
 Generate_UnboundStats () {
 	#generate stats to raw file
-	printf "$(unbound-control stats_noreset)" > $raw_statsFile
+	if [ -n "$(pidof unbound)" ]; then 
+		printf "$($UNBOUNCTRLCMD stats_noreset)" > $raw_statsFile
+	else
+		#output empty data, cannot get new stats
+		cat /jffs/addons/unbound/emptystats > $raw_statsFile
+	fi
 	
 	#generate header
 	LINE=" --------------------------------------------------------\\n"
@@ -153,7 +160,7 @@ Generate_UnboundStats () {
 	printf "$(awk 'BEGIN {FS="[= ]"} /total.requestlist.avg=/ {print "\\n Average number of requests in list for recursive processing: " $2}' $raw_statsFile )" >> $statsFile
 	
 	#extended stats
-	if [ "$($UNBOUNCTRLCMD get_option extended-statistics)" == "yes" ];then 
+	if [ -n "$(pidof unbound)" ] && [ "$($UNBOUNCTRLCMD get_option extended-statistics)" == "yes" ];then 
 		printf "\\n\\n Extended Statistics\\n$LINE" >> $statsFile
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.rrset=/ {print "\\n RRset cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
 		printf "$(awk 'BEGIN {FS="[= ]"} /mem.cache.message=/ {print "\\n Message cache usage in bytes: " $2}' $raw_statsFile )" >> $statsFile
@@ -220,7 +227,7 @@ Generate_UnboundStats () {
 
 	#cleanup temp files
 	rm -f "/tmp/unbound-"*".csv"
-	rm -f "/tmp/unbound-stats.sql"
+	rm -f "/tmp/unbound-"*".sql"
 	[ -f $raw_statsFile ] && rm -f $raw_statsFile
 	[ -f $statsFile ] && rm -f $statsFile
 	[ -f $statsTitleFile ] && rm -f $statsTitleFile
@@ -238,7 +245,7 @@ Auto_Startup(){
 			else
 				echo "#!/bin/sh" > /jffs/scripts/post-mount
 				echo "" >> /jffs/scripts/post-mount
-				echo "/jffs/scripts/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
+				echo "$SCRIPT_DIR/$SCRIPT_NAME_LOWER startup"' # '"$SCRIPT_NAME" >> /jffs/scripts/post-mount
 				chmod 0755 /jffs/scripts/post-mount
 			fi
 		;;
@@ -313,6 +320,11 @@ Create_Dirs(){
 	
 	if [ ! -d "$SCRIPT_WEB_DIR" ]; then
 		mkdir -p "$SCRIPT_WEB_DIR"
+	fi
+
+	# migrate to USB key, to aviod using space on JFFs
+	if [ -f "$dbOldStats" ]; then
+		mv $dbOldStats $dbStats
 	fi
 }
 
@@ -401,7 +413,7 @@ ScriptHeader(){
 	printf "#|    |  /   |  \ \_\ (  <_> )  |  /   |  \/ /_/ |   /        \|  |  / __ \|  |  \___ \ \\n"
 	printf "#|______/|___|  /___  /\____/|____/|___|  /\____ |  /_______  /|__| (____  /__| /____  >\\n"
 	printf "#             \/    \/                  \/      \/          \/           \/          \/ \\n"
-	printf "## by @juched %s                                                                    \\n" "$SCRIPT_VERSION"
+	printf "## by @juched - Generate Stats for GUI tab - %s                                         \\n" "$SCRIPT_VERSION"
 	printf "## with credit to @JackYaz for his shared scripts                                       \\n"
 	printf "\\n"
 	printf "unbound_stats.sh\\n"
