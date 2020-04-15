@@ -24,6 +24,10 @@ readonly SCRIPT_DIR="/jffs/addons/unbound"
 #define needed commands
 readonly UNBOUNCTRLCMD="unbound-control"
 
+Say(){
+   echo -e $$ $@ | logger -st "($(basename $0))"
+}
+
 ScriptHeader() {
 	printf "\\n"
 	printf "##\\n"
@@ -53,12 +57,12 @@ download_reload() {
   do
     set -- $line
     #[ "${$line:0:1}" == "#" ] && continue
-    echo "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sitesfile | wc -l) from $1."
+    Say "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sitesfile | wc -l) from $1."
     curl --progress-bar $1 > $2
     dos2unix $2
 
     if [ "$reload" == "reload" ] && [ ! -z "$(pidof unbound)" ]; then
-      echo "Reload unbound for zone named $3"
+      Say "Reload unbound for zone named $3"
       $UNBOUNCTRLCMD auth_zone_reload "$3"
     fi
     count=$((count + 1))
