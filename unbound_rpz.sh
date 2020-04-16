@@ -13,13 +13,15 @@
 ## v1.0 - Initial quick release.  Run it once, it keeps running.  No installer.
 ## v1.0.1 - Only reload if unbound is running
 ## v1.1.0 - Updated with proper commands to install/uninstall and update.  Now survives reboot of router
-readonly SCRIPT_VERSION="v1.1.0"
+## v1.2.0 - Support unbound.conf.firewall generation during install, and clean up during uninstall (needs v3.03 of unbound_manager)
+readonly SCRIPT_VERSION="v1.2.0"
 
 #define needed vars
 readonly rpzSitesFile="/opt/share/unbound/configs/rpzsites"
 readonly SCRIPT_NAME="Unbound_RPZ.sh"
 readonly SCRIPT_NAME_LOWER="unbound_rpz.sh"
 readonly SCRIPT_DIR="/jffs/addons/unbound"
+readonly FIREWALL_CONFIG="/opt/share/unbound/configs/unbound.conf.firewall"
 
 #define needed commands
 readonly UNBOUNCTRLCMD="unbound-control"
@@ -48,20 +50,49 @@ ScriptHeader() {
 	printf "		uninstall - Stops the automatic download of data files, and clean up\\n"
 }
 
+# $1 rpz_name $2 url $3 filename
+generate_rpz() {
+  echo "rpz:" >> "$FIREWALL_CONFIG"
+  echo "name: $1" >> "$FIREWALL_CONFIG"
+  echo "#url: \"$2\"" >> "$FIREWALL_CONFIG"
+  echo "zonefile: $3" >> "$FIREWALL_CONFIG"
+  echo "rpz-log: yes" >> "$FIREWALL_CONFIG"
+  echo "rpz-log-name: \"$1\"" >> "$FIREWALL_CONFIG"
+  echo "rpz-action-override: nxdomain" >> "$FIREWALL_CONFIG"
+}
 
 download_reload() {
   sitesfile=$1
-  reload=$2
+  cmd=$2
   count=1
+
+  if [ "$cmd" == "install" ]; then
+    echo "Creating new unbound.conf.firewall file."
+    echo "" > "$FIREWALL_CONFIG"
+  fi
+
   while read -r line
   do
     set -- $line
     #[ "${$line:0:1}" == "#" ] && continue
-    Say "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sitesfile | wc -l) from $1."
-    curl --progress-bar $1 > $2
-    dos2unix $2
 
-    if [ "$reload" == "reload" ] && [ ! -z "$(pidof unbound)" ]; then
+    if [ "$cmd" != "uninstall" ]; then
+      Say "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sitesfile | wc -l) from $1."
+      curl --progress-bar $1 > $2
+      dos2unix $2
+    fi
+
+    if [ "$cmd" == "install" ]; then
+      echo "Adding zone $3 to unbound.conf.firewall."
+      generate_rpz $3 $1 $2
+    fi
+
+    if [ "$cmd" == "uninstall" ]; then
+      echo "Removing zone file for zone $3."
+      [ -f $2 ] && rm -rf $2
+    fi 
+
+    if [ "$cmd" == "reload" ] && [ ! -z "$(pidof unbound)" ]; then
       Say "Reload unbound for zone named $3"
       $UNBOUNCTRLCMD auth_zone_reload "$3"
     fi
@@ -132,7 +163,7 @@ case "$1" in
 	install)
 		Auto_Startup create
 		Auto_Cron create
-		download_reload "$rpzSitesFile" "no_reload"
+		download_reload "$rpzSitesFile" "install"
 		echo "Installed."
 		exit 0
 	;;
@@ -148,7 +179,10 @@ case "$1" in
 		Auto_Startup delete
 		Auto_Cron delete
 		echo "Uninstalled."
-		# cleanup zones files previously downloaded?
+
+		# cleanup zones files previously downloaded
+		download_reload "$rpzSitesFile" "uninstall"
+		[ -f "$FIREWALL_CONFIG" ] && rm -rf "$FIREWALL_CONFIG"
 		exit 0
 	;;
 esac
