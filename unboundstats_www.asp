@@ -86,6 +86,8 @@ th.keystatsnumber {
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtopblockedstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtoprepliesstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unbounddailyreplies.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundrpzstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundrpzhits.js"></script>
 
 
 <script>
@@ -131,8 +133,39 @@ var datafilterPlugin = {
 		filterData(chartInstance);
 	}
 }
-</script>
-<script>
+
+/* create and return new array padding missing days*/
+function FillEmptyDates(startDay, data) {
+  var startDiff = dateDiff(startDay, data[0].x);
+  if (startDiff > 1)
+  {
+    var fillData = { x: moment(startDay), y: 0 };
+    data.unshift(fillData);
+  }
+  newData = [data[0]];
+
+  for (i = 1; i < data.length; i++) {
+    var diff = dateDiff(data[i - 1].x, data[i].x);
+    var startDate = new Date(data[i - 1].x);
+    if (diff > 1) {
+      for (j = 0; j < diff - 1; j++) {
+        var fillDate = new Date(startDate);
+        fillDate.setDate(fillDate.getDate() + (j+1));
+        var fillData = { x: moment(fillDate), y: 0 };
+          newData.push(fillData);
+      }
+    }
+    newData.push(data[i]);
+  }
+  return newData;
+}
+
+
+/* helper function to find date differences*/
+function dateDiff(d1, d2) {
+  return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
 var BarChartHistogram, BarChartAnswers, BarChartTopBlocked, BarChartTopReplies;
 var charttypehistogram, charttypeanswers, charttypetopblocked, charttypetopreplies;
 var ShowLines=GetCookie("ShowLines");
@@ -155,7 +188,7 @@ function Draw_Chart_NoData(txtchartname){
 	ctx.fillText('No data to display', 365, 150);
 	ctx.restore();
 }
-function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname){
+function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname,txtdateformat){
 	var objchartname=window["LineChart"+txtchartname];
 	var txtdataname="Data"+txtchartname;
 	var objdataname=window["Data"+txtchartname];
@@ -181,7 +214,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 		title: { display: true, text: txttitle },
 		tooltips: {
 			callbacks: {
-					title: function (tooltipItem, data) { return (moment(tooltipItem[0].xLabel).format('YYYY-MM-DD HH:mm:ss')); },
+					title: function (tooltipItem, data) { return moment(tooltipItem[0].xLabel).format(txtdateformat);},
 					label: function (tooltipItem, data) { return data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index].y.toString() + ' ' + txtunity;}
 				},
 				mode: 'point',
@@ -212,7 +245,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 		plugins: {
 			zoom: {
 				pan: {
-					enabled: true,
+					enabled: false,
 					mode: 'xy',
 					rangeMin: {
 						x: new Date().getTime() - (factor * numunitx),
@@ -224,7 +257,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 					},
 				},
 				zoom: {
-					enabled: true,
+					enabled: false,
 					mode: 'xy',
 					rangeMin: {
 						x: new Date().getTime() - (factor * numunitx),
@@ -320,9 +353,9 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 	var lineDataset = {
 		datasets: [{data: objdataname,
 			label: txttitle,
-			borderWidth: 1,
-			pointRadius: 1,
-			lineTension: 0,
+			borderWidth: 2,
+			pointRadius: 3,
+			lineTension: 0.3,
 			fill: ShowFill,
 			backgroundColor: colourname,
 			borderColor: colourname,
@@ -375,9 +408,10 @@ function ToggleFill() {
 	RedrawAllCharts();
 }
 function RedrawAllCharts() {
-	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500");
-	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5");
-	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff");
+	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500",'YYYY-MM-DD HH:mm:ss');
+	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5",'YYYY-MM-DD HH:mm:ss');
+	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff",'YYYY-MM-DD HH:mm:ss');
+	Draw_Chart("divLineChartRPZHitsMonthly","DNS Firewall Hits","hit(s)","day",30,"#ffffff",'YYYY-MM-DD');
 }
 function GetCookie(cookiename) {
 	var s;
@@ -420,7 +454,10 @@ function initial(){
 	SetUnboundStats();
 	SetUnboundStatsTitle();
 
-	// redraw the CPH graphs
+	// redraw the CPH and RPZ graphs
+	var startDate = new Date();
+	startDate.setDate(startDate.getDate() - 30);
+	DatadivLineChartRPZHitsMonthly = FillEmptyDates(startDate, DatadivLineChartRPZHitsMonthly);
 	RedrawAllCharts();
 	// change layouts which will setup types and then redraw graphs
 	changeLayout(E('charttypehistogram'),"BarChartHistogram","charttypehistogram");
@@ -428,8 +465,9 @@ function initial(){
 	changeLayout(E('charttypetopblocked'),"BarChartTopBlocked","charttypetopblocked");
 	changeLayout(E('charttypetopreplies'),"BarChartTopReplies","charttypetopreplies");
 
-	// load replies table
+	// load tables
 	LoadDailyRepliesTable();
+	LoadRPZHitsTable();
 
 	$("thead").click(function(){
 		$(this).siblings().toggle("fast");
@@ -808,7 +846,7 @@ function ZoomPanMax(charttype, axis, datasetname) {
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
 <thead class="collapsible default-collapsed" id="last7">
 <tr>
-<td colspan="2">Cache Hit % Last 7 days (click to expand/collapse)</td>
+<td colpan="2">Cache Hit % Last 7 days (click to expand/collapse)</td>
 </tr>
 </thead>
 <tr>
@@ -940,8 +978,49 @@ function ZoomPanMax(charttype, axis, datasetname) {
 </td>
 </tr>
 </table>
-
 <div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="last30">
+<tr>
+<td colspan="2">DNS Firewall Hits Last 30 days (click to expand/collapse) - requires DNS Firewall enabled</td>
+</tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:730px;padding-left:5px;"><canvas id="divLineChartRPZHitsMonthly" height="300" /></div>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible expanded">
+<tr><td colspan="2">DNS Firewall Hits Last 30 days (click to expand/collapse) - limited to 250, requires DNS Firewall enabled</td></tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable StatsTable">
+	<col style="width:380px;">
+	<col style="width:120px;">
+	<col style="width:120px;">
+	<col style="width:80px;">
+	<thead>
+	<tr>
+	<th class="keystatsnumber">Domain</th>
+	<th class="keystatsnumber">Client IP</th>
+	<th class="keystatsnumber">Zone</th>
+	<th class="keystatsnumber">Count</th>
+	</tr>
+	</thead>
+
+	<tr id="DatadivTableRPZHits" />	
+</table>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
 <thead class="collapsible" id="topblocked">
 <tr>
@@ -977,7 +1056,7 @@ function ZoomPanMax(charttype, axis, datasetname) {
 
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
 <thead class="collapsible expanded">
-<tr><td colspan="2">Today DNS Replies (click to expand/collapse) - limited to 250, requires log-replies enabled</td></tr>
+<tr><td colspan="2">Today's DNS Replies (click to expand/collapse) - limited to 250, requires log-replies enabled</td></tr>
 </thead>
 <tr>
 <td colspan="2" align="center" style="padding: 0px;">

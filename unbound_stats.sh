@@ -18,7 +18,8 @@
 ## v1.2.3 - April 10 2020 - Fixed issue with "" domain name in SQL, breaking JS
 ## v1.2.4 - April 12 2020 - Removed error message on clean install for missing md5 file
 ## v1.2.5 - April 13 2020 - During install, do not Generate stats if unbound is not running
-readonly SCRIPT_VERSION="v1.2.4"
+## v1.3.0 - April 16 2020 - Show stats for DNS Firewall
+readonly SCRIPT_VERSION="v1.3.0"
 
 #define www script names
 readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
@@ -45,6 +46,8 @@ statsTitleFile="$SCRIPT_WEB_DIR/unboundstatstitle.txt"
 statsFileJS="$SCRIPT_WEB_DIR/unboundstats.js"
 statsTitleFileJS="$SCRIPT_WEB_DIR/unboundstatstitle.js"
 statsCHPFileJS="$SCRIPT_WEB_DIR/unboundchpstats.js"
+statsRPZFileJS="$SCRIPT_WEB_DIR/unboundrpzstats.js"
+statsRPZHitsFileJS="$SCRIPT_WEB_DIR/unboundrpzhits.js"
 statsHistogramFileJS="$SCRIPT_WEB_DIR/unboundhistogramstats.js"
 statsAnswersFileJS="$SCRIPT_WEB_DIR/unboundanswersstats.js"
 statsTopBlockedFileJS="$SCRIPT_WEB_DIR/unboundtopblockedstats.js"
@@ -83,7 +86,11 @@ WriteData_ToJS(){
 	contents="$3"'.unshift( '
 	while IFS='' read -r line || [ -n "$line" ]; do
 		if echo "$line" | grep -q "NaN"; then continue; fi
-		datapoint="{ x: moment.unix(""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
+		if [ "$4" == "date-day" ]; then
+			datapoint="{ x: moment(\"""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""\", \"YYYY-MM-DD\"), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
+		else	
+			datapoint="{ x: moment.unix(""$(echo "$line" | awk 'BEGIN{FS=","}{ print $1 }' | awk '{$1=$1};1')""), y: ""$(echo "$line" | awk 'BEGIN{FS=","}{ print $2 }' | awk '{$1=$1};1')"" }"
+		fi
 		contents="$contents""$datapoint"","
 	done < "$1"
 	contents=$(echo "$contents" | sed 's/.$//')
@@ -260,7 +267,11 @@ Generate_UnboundStats () {
 	fi
 	
 	#calc % served by cache
-	UNB_CHP="$(awk 'BEGIN {printf "%0.2f", '$UNB_NUM_CH'*100/'$UNB_NUM_Q'}' )"
+	if [ ! -z "$UNB_NUM_Q" ] && [ $UNB_NUM_Q -ne 0 ]; then
+		UNB_CHP="$(awk 'BEGIN {printf "%0.2f", '$UNB_NUM_CH'*100/'$UNB_NUM_Q'}' )"
+	else
+		UNB_CHP=0
+	fi
 	echo "Calculated Cache Hit Percentage: $UNB_CHP"
 	printf "$(awk 'BEGIN {printf "\\n\\n Cache hit success percent: %s", '$UNB_CHP'}' )" >> $statsFile
 	
@@ -295,7 +306,7 @@ Generate_UnboundStats () {
 	
 	"$SQLITE3_PATH" "$dbStats" < /tmp/unbound-stats.sql
 	
-	rm -f "$statsCHPFileJS"
+	[ -f $statsCHPFileJS ] && rm -f "$statsCHPFileJS"
 	WriteData_ToJS "/tmp/unbound-chp-daily.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentDaily"
 	WriteData_ToJS "/tmp/unbound-chp-weekly.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentWeekly"
 	WriteData_ToJS "/tmp/unbound-chp-monthly.csv" "$statsCHPFileJS" "DatadivLineChartCacheHitPercentMonthly"
@@ -334,6 +345,27 @@ Generate_UnboundStats () {
 	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-dailyreplies.sql
 	dos2unix "/tmp/unbound-dailyreplies.csv"
 	WriteUnboundCSV_ToJS_Table "/tmp/unbound-dailyreplies.csv" $statsDailyRepliesFileJS "LoadDailyRepliesTable" "DatadivTableDailyReplies"
+
+	#generate DNS Firewall Events (RPZ)
+	echo "Calculating DNS Firewall data..."
+	{
+		echo ".mode csv"
+		echo ".output /tmp/unbound-rpz-monthly.csv"
+		echo "select [date],SUM(count) from rpz_events GROUP BY date ORDER BY date;"
+	} > /tmp/unbound-rpz.sql
+	
+	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-rpz.sql
+	[ -f $statsRPZFileJS ] && rm -f "$statsRPZFileJS"
+	WriteData_ToJS "/tmp/unbound-rpz-monthly.csv" "$statsRPZFileJS" "DatadivLineChartRPZHitsMonthly" "date-day"
+
+	#generate table data for all known RPZ hits
+	echo "Outputting DNS Firewall Hits ..."
+	[ -f $statsRPZHItsFileJS ] && rm -f $statsRPZHitsFileJS
+	whereString=""
+	WriteUnboundSqlLog_ToFile "rpz_events" "domain, client_ip, zone" "count" "250" "/tmp/unbound-rpzhits.csv" "/tmp/unbound-rpzhits.sql" "$whereString"
+	"$SQLITE3_PATH" "$dbLogs" < /tmp/unbound-rpzhits.sql
+	dos2unix "/tmp/unbound-rpzhits.csv"
+	WriteUnboundCSV_ToJS_Table "/tmp/unbound-rpzhits.csv" $statsRPZHitsFileJS "LoadRPZHitsTable" "DatadivTableRPZHits"
 
 	#cleanup temp files
 	rm -f "/tmp/unbound-"*".csv"
@@ -524,7 +556,8 @@ Unmount_WebUI(){
 	fi
 }
 
-ScriptHeader(){
+# $1 show commands
+ScriptHeader() { 
 	printf "\\n"
 	printf "##\\n"
 	printf "# ____ ___     ___.                            .___   _________ __          __          \\n"
@@ -536,10 +569,12 @@ ScriptHeader(){
 	printf "## by @juched - Generate Stats for GUI tab - %s                                         \\n" "$SCRIPT_VERSION"
 	printf "## with credit to @JackYaz for his shared scripts                                       \\n"
 	printf "\\n"
-	printf "unbound_stats.sh\\n"
-	printf "		install   - Installs the needed files to show UI and update stats\\n"
-	printf "		generate  - enerates statistics now for UI\\n"
-	printf "		uninstall - Removes files needed for UI and stops stats update\\n"
+	if [ ! -z $1 ]; then
+		printf "unbound_stats.sh\\n"
+		printf "		install   - Installs the needed files to show UI and update stats\\n"
+		printf "		generate  - enerates statistics now for UI\\n"
+		printf "		uninstall - Removes files needed for UI and stops stats update\\n"
+	fi
 }
 
 Download_File(){
@@ -600,10 +635,11 @@ Wait_For_Unbound() {
 
 #Main loop
 if [ -z "$1" ]; then
-	ScriptHeader
+	ScriptHeader show_commands
 	exit 0
 fi
 
+ScriptHeader
 case "$1" in
 	install)
 		Install_Dependancies
