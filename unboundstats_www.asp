@@ -23,6 +23,44 @@ font-weight: bolder;
   text-align: left;
   outline: none;
   cursor: pointer;
+}	
+
+th.keystatsnumber {
+  font-size: 20px !important;
+  font-weight: bolder !important;
+}
+
+.StatsTable {
+  table-layout: fixed !important;
+  width: 747px !important;
+  text-align: center !important;
+}
+.StatsTable th {
+  background-color:#1F2D35 !important;
+  background:#2F3A3E !important;
+  border-bottom:none !important;
+  border-top:none !important;
+  font-size: 12px !important;
+  color: white !important;
+  padding: 4px !important;
+  width: 740px !important;
+}
+.StatsTable td {
+  padding: 2px !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+.StatsTable a {
+  font-weight: bolder !important;
+  text-decoration: underline !important;
+}
+.StatsTable th:first-child,
+.StatsTable td:first-child {
+  border-left: none !important;
+}
+.StatsTable th:last-child ,
+.StatsTable td:last-child {
+  border-right: none !important;
 }
 
 </style>
@@ -45,6 +83,11 @@ font-weight: bolder;
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundchpstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundhistogramstats.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundanswersstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtopblockedstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundtoprepliesstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unbounddailyreplies.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundrpzstats.js"></script>
+<script language="JavaScript" type="text/javascript" src="/ext/unbound_stats.sh/unboundrpzhits.js"></script>
 
 
 <script>
@@ -90,10 +133,62 @@ var datafilterPlugin = {
 		filterData(chartInstance);
 	}
 }
-</script>
-<script>
-var BarChartHistogram, BarChartAnswers;
-var charttypehistogram, charttypeanswers;
+
+/* create and return new array padding missing days*/
+function FillEmptyDates(startDay, endDay, data) {
+  var strStart = startDay.getFullYear() + "-" + (startDay.getMonth()+1) + "-" + startDay.getDate();
+  var momStart = moment(strStart, "YYYY-MM-DD");
+  var strEnd = endDay.getFullYear() + "-" + (endDay.getMonth()+1) + "-" + endDay.getDate();
+  var momEnd = moment(strEnd, "YYYY-MM-DD");
+  if (data.length > 0) // non-empty array
+  {
+    // empty value at start date for visutals
+    var startDiff = dateDiff(momStart, data[0].x);
+    if (startDiff >= 1)
+    {
+      var fillData = { x: moment(momStart), y: 0 };
+      data.unshift(fillData);
+    }
+    // empty value at end date for visuals
+    var endDiff = dateDiff(data[data.length-1].x, momEnd);
+    if (endDiff >= 1)
+    {
+      var fillData = { x: moment(momEnd), y: 0 };
+      data.push(fillData);
+    }
+  } else { // empty array
+
+      var fillData = { x: moment(momStart), y: 0 };
+      data.unshift(fillData);
+      var fillData2 = { x: moment(momEnd), y: 0 };
+      data.push(fillData2);
+  }
+  newData = [data[0]];
+
+  for (i = 1; i < data.length; i++) {
+    var diff = dateDiff(data[i - 1].x, data[i].x);
+    var startDate = new Date(data[i - 1].x);
+    if (diff > 1) {
+      for (j = 0; j < diff - 1; j++) {
+        var fillDate = new Date(startDate);
+        fillDate.setDate(fillDate.getDate() + (j+1));
+        var fillData = { x: moment(fillDate), y: 0 };
+          newData.push(fillData);
+      }
+    }
+    newData.push(data[i]);
+  }
+  return newData;
+}
+
+
+/* helper function to find date differences*/
+function dateDiff(d1, d2) {
+  return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+var BarChartHistogram, BarChartAnswers, BarChartTopBlocked, BarChartTopReplies;
+var charttypehistogram, charttypeanswers, charttypetopblocked, charttypetopreplies;
 var ShowLines=GetCookie("ShowLines");
 var ShowFill=GetCookie("ShowFill");
 Chart.defaults.global.defaultFontColor = "#CCC";
@@ -114,7 +209,7 @@ function Draw_Chart_NoData(txtchartname){
 	ctx.fillText('No data to display', 365, 150);
 	ctx.restore();
 }
-function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname){
+function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname,txtdateformat,sugMinY){
 	var objchartname=window["LineChart"+txtchartname];
 	var txtdataname="Data"+txtchartname;
 	var objdataname=window["Data"+txtchartname];
@@ -140,7 +235,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 		title: { display: true, text: txttitle },
 		tooltips: {
 			callbacks: {
-					title: function (tooltipItem, data) { return (moment(tooltipItem[0].xLabel).format('YYYY-MM-DD HH:mm:ss')); },
+					title: function (tooltipItem, data) { return moment(tooltipItem[0].xLabel).format(txtdateformat);},
 					label: function (tooltipItem, data) { return data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index].y.toString() + ' ' + txtunity;}
 				},
 				mode: 'point',
@@ -162,6 +257,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 				scaleLabel: { display: false, labelString: txttitle },
 				ticks: {
 					display: true,
+					suggestedMin: sugMinY,
 					callback: function (value, index, values) {
 						return round(value,2).toFixed(2) + ' ' + txtunity;
 					}
@@ -171,7 +267,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 		plugins: {
 			zoom: {
 				pan: {
-					enabled: true,
+					enabled: false,
 					mode: 'xy',
 					rangeMin: {
 						x: new Date().getTime() - (factor * numunitx),
@@ -183,7 +279,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 					},
 				},
 				zoom: {
-					enabled: true,
+					enabled: false,
 					mode: 'xy',
 					rangeMin: {
 						x: new Date().getTime() - (factor * numunitx),
@@ -279,9 +375,9 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname)
 	var lineDataset = {
 		datasets: [{data: objdataname,
 			label: txttitle,
-			borderWidth: 1,
-			pointRadius: 1,
-			lineTension: 0,
+			borderWidth: 2,
+			pointRadius: 3,
+			lineTension: 0.3,
 			fill: ShowFill,
 			backgroundColor: colourname,
 			borderColor: colourname,
@@ -334,9 +430,10 @@ function ToggleFill() {
 	RedrawAllCharts();
 }
 function RedrawAllCharts() {
-	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500");
-	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5");
-	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff");
+	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartRPZHitsMonthly","DNS Firewall Hits","hit(s)","day",30,"#ffffff",'YYYY-MM-DD',0);
 }
 function GetCookie(cookiename) {
 	var s;
@@ -372,21 +469,60 @@ function initial(){
 	GetCookieNew("charttypehistogram",1);
 	GetCookieNew("colouranswers",0);
 	GetCookieNew("charttypeanswers",2);
+	GetCookieNew("colourtopblocked",0);
+	GetCookieNew("charttypetopblocked",0);
 	SetCurrentPage();
 	show_menu();
 	SetUnboundStats();
 	SetUnboundStatsTitle();
+
+	// redraw the CPH and RPZ graphs
+	var startDate = new Date();
+	var endDate = new Date();
+	startDate.setDate(startDate.getDate() - 30);
+	DatadivLineChartRPZHitsMonthly = FillEmptyDates(startDate, endDate, DatadivLineChartRPZHitsMonthly);
 	RedrawAllCharts();
-	Draw_Histogram_Chart();
+	// change layouts which will setup types and then redraw graphs
 	changeLayout(E('charttypehistogram'),"BarChartHistogram","charttypehistogram");
-	Draw_Answers_Chart();
 	changeLayout(E('charttypeanswers'),"BarChartAnswers","charttypeanswers");
+	changeLayout(E('charttypetopblocked'),"BarChartTopBlocked","charttypetopblocked");
+	changeLayout(E('charttypetopreplies'),"BarChartTopReplies","charttypetopreplies");
+
+	// load tables
+	LoadDailyRepliesTable();
+	LoadRPZHitsTable();
 
 	$("thead").click(function(){
 		$(this).siblings().toggle("fast");
 	})
 	
 	$(".default-collapsed").trigger("click");
+}
+
+function get_BarChart(name) {
+	if ("ChartHistogram" == name) {
+		return BarChartHistogram;
+	} else if ("ChartAnswers" == name) {
+		return BarChartAnswers;
+	} else if ("ChartTopBlocked" == name) {
+		return BarChartTopBlocked;
+	} else if ("ChartTopReplies" == name) {
+		return BarChartTopReplies;
+	} else {
+		return NULL;
+	}
+}
+
+function set_BarChart(name, value) {
+	if ("ChartHistogram" == name) {
+		BarChartHistogram = value;
+	} else if ("ChartAnswers" == name) {
+		BarChartAnswers = value;
+	} else if ("ChartTopBlocked" == name) {
+		BarChartTopBlocked = value;;
+	} else if ("ChartTopReplies" == name) {
+		BarChartTopReplies = value;;
+	}
 }
 
 function reload() {
@@ -401,13 +537,14 @@ function applyRule() {
 	document.form.submit();
 }
 
-function Draw_Histogram_Chart() {
-	if(typeof barLabelsHistogram === 'undefined' || barLabelsHistogram === null || (Array.isArray(barLabelsHistogram) && barLabelsHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if(typeof barDataHistogram === 'undefined' || barDataHistogram === null || (Array.isArray(barDataHistogram) && barDataHistogram.length == 0)) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if (barLabelsHistogram.length == 0) { Draw_Chart_NoData("ChartHistogram"); return; }
-	if (BarChartHistogram != undefined) BarChartHistogram.destroy();
-	var ctx = document.getElementById("ChartHistogram").getContext("2d");
-	var barOptionsHistogram = {
+function Draw_Bar_Chart(barLabels, barData, ChartName, charttype, colourtag) {
+	if(typeof barLabels === 'undefined' || barLabels === null || (Array.isArray(barLabels) && barLabels.length == 0)) { Draw_Chart_NoData(ChartName); return; }
+	if(typeof barData === 'undefined' || barData === null || (Array.isArray(barData) && barData.length == 0)) { Draw_Chart_NoData(ChartName); return; }
+	if (barLabels.length == 0) { Draw_Chart_NoData(ChartName); return; }
+	var BarChartName = get_BarChart(ChartName);
+	if (BarChartName != undefined) BarChartName.destroy();
+	var ctx = document.getElementById(ChartName).getContext("2d");
+	var barOptions = {
 		segmentShowStroke : false,
 		segmentStrokeColor : "#000",
 		animationEasing : "easeOutQuart",
@@ -427,144 +564,62 @@ function Draw_Histogram_Chart() {
 		},
 		scales: {
 			xAxes: [{
-				display: showAxis(charttypehistogram,"x"),
-				gridLines: { display: showGrid(charttypehistogram,"x"), color: "#282828" },
-				ticks: { display: showAxis(charttypehistogram,"x"), beginAtZero: false }
+				display: showAxis(charttype,"x"),
+				gridLines: { display: showGrid(charttype,"x"), color: "#282828" },
+				ticks: { display: showAxis(charttype,"x"), beginAtZero: false }
 			}],
 			yAxes: [{
-				display: showAxis(charttypehistogram,"y"),
+				display: showAxis(charttype,"y"),
 				gridLines: { display: false, color: "#282828" },
 				scaleLabel: { display: false, labelString: "Blocks" },
-				ticks: { display: showAxis(charttypehistogram,"y"), beginAtZero: false }
+				ticks: { display: showAxis(charttype,"y"), beginAtZero: false }
 			}]
 		},
 		plugins: {
 			zoom: {
 				pan: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypehistogram),
+					enabled: false,
+					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
 						y: 0
 					},
 					rangeMax: {
-						x: ZoomPanMax(charttypehistogram,"x",barDataHistogram),
-						y: ZoomPanMax(charttypehistogram,"y",barDataHistogram)
+						x: ZoomPanMax(charttype,"x",barData),
+						y: ZoomPanMax(charttype,"y",barData)
 					},
 				},
 				zoom: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypehistogram),
+					enabled: false,
+					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
 						y: 0
 					},
 					rangeMax: {
-						x: ZoomPanMax(charttypehistogram,"x",barDataHistogram),
-						y: ZoomPanMax(charttypehistogram,"y",barDataHistogram)
+						x: ZoomPanMax(charttype,"x",barData),
+						y: ZoomPanMax(charttype,"y",barData)
 					},
 					speed: 0.1,
 				}
 			}
 		}
 	};
-	var barDatasetHistogram = {
-		labels: barLabelsHistogram,
-		datasets: [{data: barDataHistogram,
+	var barDataset = {
+		labels: barLabels,
+		datasets: [{data: barData,
 			borderWidth: 1,
-			backgroundColor: poolColors(barDataHistogram.length),
+			backgroundColor: poolColors(barData.length),
 			borderColor: "#000000",
 		}]
 	};
-	BarChartHistogram = new Chart(ctx, {
-		type: getChartType(charttypehistogram),
-		options: barOptionsHistogram,
-		data: barDatasetHistogram
+	BarChartName = new Chart(ctx, {
+		type: getChartType(charttype),
+		options: barOptions,
+		data: barDataset
 	});
-	changeColour(E('colourhistogram'),BarChartHistogram,barDataHistogram,"colourhistogram")
-}
-
-function Draw_Answers_Chart() {
-	if(typeof barLabelsAnswers === 'undefined' || barLabelsAnswers === null || (Array.isArray(barLabelsAnswers) && barLabelsAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if(typeof barDataAnswers === 'undefined' || barDataAnswers === null || (Array.isArray(barDataAnswers) && barDataAnswers.length == 0)) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if (barLabelsAnswers.length == 0) { Draw_Chart_NoData("ChartAnswers"); return; }
-	if (BarChartAnswers != undefined) BarChartAnswers.destroy();
-	var ctx = document.getElementById("ChartAnswers").getContext("2d");
-	var barOptionsAnswers = {
-		segmentShowStroke : false,
-		segmentStrokeColor : "#000",
-		animationEasing : "easeOutQuart",
-		animationSteps : 100,
-		maintainAspectRatio: false,
-		animateScale : true,
-		legend: { display: false, position: "bottom", onClick: null },
-		title: { display: false },
-		tooltips: {
-			callbacks: {
-				title: function (tooltipItem, data) { return data.labels[tooltipItem[0].index]; },
-				label: function (tooltipItem, data) { return comma(data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index]); },
-			},
-			mode: 'point',
-			position: 'cursor',
-			intersect: true
-		},
-		scales: {
-			xAxes: [{
-				display: showAxis(charttypeanswers,"x"),
-				gridLines: { display: showGrid(charttypeanswers,"x"), color: "#282828" },
-				ticks: { display: showAxis(charttypeanswers,"x"), beginAtZero: false }
-			}],
-			yAxes: [{
-				display: showAxis(charttypeanswers,"y"),
-				gridLines: { display: false, color: "#282828" },
-				scaleLabel: { display: false, labelString: "Blocks" },
-				ticks: { display: showAxis(charttypeanswers,"y"), beginAtZero: false }
-			}]
-		},
-		plugins: {
-			zoom: {
-				pan: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypeanswers),
-					rangeMin: {
-						x: 0,
-						y: 0
-					},
-					rangeMax: {
-						x: ZoomPanMax(charttypeanswers,"x",barDataAnswers),
-						y: ZoomPanMax(charttypeanswers,"y",barDataAnswers)
-					},
-				},
-				zoom: {
-					enabled: true,
-					mode: ZoomPanEnabled(charttypeanswers),
-					rangeMin: {
-						x: 0,
-						y: 0
-					},
-					rangeMax: {
-						x: ZoomPanMax(charttypeanswers,"x",barDataAnswers),
-						y: ZoomPanMax(charttypeanswers,"y",barDataAnswers)
-					},
-					speed: 0.1,
-				}
-			}
-		}
-	};
-	var barDatasetAnswers = {
-		labels: barLabelsAnswers,
-		datasets: [{data: barDataAnswers,
-			borderWidth: 1,
-			backgroundColor: poolColors(barDataAnswers.length),
-			borderColor: "#000000",
-		}]
-	};
-	BarChartAnswers = new Chart(ctx, {
-		type: getChartType(charttypeanswers),
-		options: barOptionsAnswers,
-		data: barDatasetAnswers
-	});
-	changeColour(E('colouranswers'),BarChartAnswers,barDataAnswers,"colouranswers")
+	set_BarChart(ChartName, BarChartName);
+	changeColour(E(colourtag),BarChartName,barData,colourtag)
 }
 
 function changeColour(e,chartname,datasetname,cookiename) {
@@ -588,6 +643,12 @@ function changeLayout(e,chartname,cookiename) {
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "horizontalBar";
 		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "horizontalBar";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "horizontalBar";
+		}
 
 	}
 	else if ( layout == 1 ) {
@@ -596,6 +657,12 @@ function changeLayout(e,chartname,cookiename) {
 		}
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "bar";
+		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "bar";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "bar";
 		}
 
 	}
@@ -606,14 +673,26 @@ function changeLayout(e,chartname,cookiename) {
 		else if ( chartname == "BarChartAnswers" ) {
 			charttypeanswers = "pie";
 		}
+		else if ( chartname == "BarChartTopBlocked" ) {
+			charttypetopblocked = "pie";
+		}
+		else if ( chartname == "BarChartTopReplies" ) {
+			charttypetopreplies = "pie";
+		}
 
 	}
 	cookie.set(cookiename, layout, 31);
 	if ( chartname == "BarChartHistogram" ) {
-		Draw_Histogram_Chart();
+		Draw_Bar_Chart(barLabelsHistogram, barDataHistogram, "ChartHistogram", charttypehistogram, "colourhistogram");
 	}
-	if ( chartname == "BarChartAnswers" ) {
-		Draw_Answers_Chart();
+	else if ( chartname == "BarChartAnswers" ) {
+		Draw_Bar_Chart(barLabelsAnswers, barDataAnswers, "ChartAnswers", charttypeanswers, "colouranswers");
+	}
+	else if ( chartname == "BarChartTopBlocked" ) {
+		Draw_Bar_Chart(barLabelsTopBlocked, barDataTopBlocked, "ChartTopBlocked", charttypetopblocked, "colourtopblocked");
+	}
+	else if ( chartname == "BarChartTopReplies" ) {
+		Draw_Bar_Chart(barLabelsTopReplies, barDataTopReplies, "ChartTopReplies", charttypetopreplies, "colourtopreplies");
 	}
 
 }
@@ -764,8 +843,6 @@ function ZoomPanMax(charttype, axis, datasetname) {
 <td style="background-color:rgb(77, 89, 93);border:0px;">
 <input type="button" onclick="applyRule();" value="Update stats" class="button_gen" name="button">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<input type="button" onclick="RedrawAllCharts();" value="Reset Zoom" class="button_gen" name="button">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <input type="button" onclick="ToggleLines();" value="Toggle Lines" class="button_gen" name="button">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <input type="button" onclick="ToggleFill();" value="Toggle Fill" class="button_gen" name="button">
@@ -790,7 +867,7 @@ function ZoomPanMax(charttype, axis, datasetname) {
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
 <thead class="collapsible default-collapsed" id="last7">
 <tr>
-<td colspan="2">Cache Hit % Last 7 days (click to expand/collapse)</td>
+<td colpan="2">Cache Hit % Last 7 days (click to expand/collapse)</td>
 </tr>
 </thead>
 <tr>
@@ -878,7 +955,6 @@ function ZoomPanMax(charttype, axis, datasetname) {
 </tr>
 </table>
 
-
 <div style="line-height:10px;">&nbsp;</div>
 <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#4D595D" class="FormTable">
 <tr>
@@ -890,7 +966,142 @@ function ZoomPanMax(charttype, axis, datasetname) {
 </td>
 </tr>
 </table>
+
 <div style="line-height:10px;">&nbsp;</div>
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="topblocked">
+<tr>
+<td colspan="2">Top Ad-Blocked Domains (click to expand/collapse) - requires log-local-actions enabled</td>
+</tr>
+</thead>
+<tr>
+<th width="40%">Style for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeColour(this,BarChartTopBlocked,barDataTopBlocked,'colourtopblocked')" id="colourtopblocked">
+<option value="0">Colour</option>
+<option value="1">Plain</option>
+</select>
+</td>
+</tr>
+<tr>
+<th width="40%">Layout for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeLayout(this,'BarChartTopBlocked','charttypetopblocked')" id="charttypetopblocked">
+<option value="0">Horizontal</option>
+<option value="1">Vertical</option>
+<option value="2">Pie</option>
+</select>
+</td>
+</tr>
+<tr>
+<td colspan="2" style="padding: 2px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:735px;padding-left:5px;"><canvas id="ChartTopBlocked" height="360" /></div>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="last30">
+<tr>
+<td colspan="2">DNS Firewall Hits Last 30 days (click to expand/collapse) - requires DNS Firewall enabled</td>
+</tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:730px;padding-left:5px;"><canvas id="divLineChartRPZHitsMonthly" height="300" /></div>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible expanded">
+<tr><td colspan="2">DNS Firewall Hits Last 30 days (click to expand/collapse) - limited to 250, requires DNS Firewall enabled</td></tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable StatsTable">
+	<col style="width:380px;">
+	<col style="width:120px;">
+	<col style="width:120px;">
+	<col style="width:80px;">
+	<thead>
+	<tr>
+	<th class="keystatsnumber">Domain</th>
+	<th class="keystatsnumber">Client IP</th>
+	<th class="keystatsnumber">Zone</th>
+	<th class="keystatsnumber">Count</th>
+	</tr>
+	</thead>
+
+	<tr id="DatadivTableRPZHits" />	
+</table>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible" id="topblocked">
+<tr>
+<td colspan="2">Top Reply Domains (click to expand/collapse) - requires log-replies enabled</td>
+</tr>
+</thead>
+<tr>
+<th width="40%">Style for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeColour(this,BarChartTopReplies,barDataTopReplies,'colourtopreplies')" id="colourtopreplies">
+<option value="0">Colour</option>
+<option value="1">Plain</option>
+</select>
+</td>
+</tr>
+<tr>
+<th width="40%">Layout for charts</th>
+<td>
+<select style="width:100px" class="input_option" onchange="changeLayout(this,'BarChartTopReplies','charttypetopreplies')" id="charttypetopreplies">
+<option value="0">Horizontal</option>
+<option value="1">Vertical</option>
+<option value="2">Pie</option>
+</select>
+</td>
+</tr>
+<tr>
+<td colspan="2" style="padding: 2px;">
+<div style="background-color:#2f3e44;border-radius:10px;width:735px;padding-left:5px;"><canvas id="ChartTopReplies" height="360" /></div>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable">
+<thead class="collapsible expanded">
+<tr><td colspan="2">Today's DNS Replies (click to expand/collapse) - limited to 250, requires log-replies enabled</td></tr>
+</thead>
+<tr>
+<td colspan="2" align="center" style="padding: 0px;">
+<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable StatsTable">
+	<col style="width:380px;">
+	<col style="width:120px;">
+	<col style="width:120px;">
+	<col style="width:80px;">
+	<thead>
+	<tr>
+	<th class="keystatsnumber">Domain</th>
+	<th class="keystatsnumber">Client IP</th>
+	<th class="keystatsnumber">Return Code</th>
+	<th class="keystatsnumber">Count</th>
+	</tr>
+	</thead>
+
+	<tr id="DatadivTableDailyReplies" />	
+</table>
+</td>
+</tr>
+</table>
+<div style="line-height:10px;">&nbsp;</div>
+
 </td>
 </tr>
 </tbody>
