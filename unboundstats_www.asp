@@ -135,12 +135,33 @@ var datafilterPlugin = {
 }
 
 /* create and return new array padding missing days*/
-function FillEmptyDates(startDay, data) {
-  var startDiff = dateDiff(startDay, data[0].x);
-  if (startDiff > 1)
+function FillEmptyDates(startDay, endDay, data) {
+  var strStart = startDay.getFullYear() + "-" + (startDay.getMonth()+1) + "-" + startDay.getDate();
+  var momStart = moment(strStart, "YYYY-MM-DD");
+  var strEnd = endDay.getFullYear() + "-" + (endDay.getMonth()+1) + "-" + endDay.getDate();
+  var momEnd = moment(strEnd, "YYYY-MM-DD");
+  if (data.length > 0) // non-empty array
   {
-    var fillData = { x: moment(startDay), y: 0 };
-    data.unshift(fillData);
+    // empty value at start date for visutals
+    var startDiff = dateDiff(momStart, data[0].x);
+    if (startDiff >= 1)
+    {
+      var fillData = { x: moment(momStart), y: 0 };
+      data.unshift(fillData);
+    }
+    // empty value at end date for visuals
+    var endDiff = dateDiff(data[data.length-1].x, momEnd);
+    if (endDiff >= 1)
+    {
+      var fillData = { x: moment(momEnd), y: 0 };
+      data.push(fillData);
+    }
+  } else { // empty array
+
+      var fillData = { x: moment(momStart), y: 0 };
+      data.unshift(fillData);
+      var fillData2 = { x: moment(momEnd), y: 0 };
+      data.pushunshift(fillData2);
   }
   newData = [data[0]];
 
@@ -456,8 +477,9 @@ function initial(){
 
 	// redraw the CPH and RPZ graphs
 	var startDate = new Date();
+	var endDate = new Date();
 	startDate.setDate(startDate.getDate() - 30);
-	DatadivLineChartRPZHitsMonthly = FillEmptyDates(startDate, DatadivLineChartRPZHitsMonthly);
+	DatadivLineChartRPZHitsMonthly = FillEmptyDates(startDate, endDate, DatadivLineChartRPZHitsMonthly);
 	RedrawAllCharts();
 	// change layouts which will setup types and then redraw graphs
 	changeLayout(E('charttypehistogram'),"BarChartHistogram","charttypehistogram");
@@ -555,7 +577,7 @@ function Draw_Bar_Chart(barLabels, barData, ChartName, charttype, colourtag) {
 		plugins: {
 			zoom: {
 				pan: {
-					enabled: true,
+					enabled: false,
 					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
@@ -567,7 +589,7 @@ function Draw_Bar_Chart(barLabels, barData, ChartName, charttype, colourtag) {
 					},
 				},
 				zoom: {
-					enabled: true,
+					enabled: false,
 					mode: ZoomPanEnabled(charttype),
 					rangeMin: {
 						x: 0,
@@ -819,8 +841,6 @@ function ZoomPanMax(charttype, axis, datasetname) {
 <tr class="apply_gen" valign="top" height="35px">
 <td style="background-color:rgb(77, 89, 93);border:0px;">
 <input type="button" onclick="applyRule();" value="Update stats" class="button_gen" name="button">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<input type="button" onclick="RedrawAllCharts();" value="Reset Zoom" class="button_gen" name="button">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <input type="button" onclick="ToggleLines();" value="Toggle Lines" class="button_gen" name="button">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
