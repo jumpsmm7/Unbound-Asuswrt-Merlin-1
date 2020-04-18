@@ -161,7 +161,7 @@ function FillEmptyDates(startDay, endDay, data) {
       var fillData = { x: moment(momStart), y: 0 };
       data.unshift(fillData);
       var fillData2 = { x: moment(momEnd), y: 0 };
-      data.pushunshift(fillData2);
+      data.push(fillData2);
   }
   newData = [data[0]];
 
@@ -209,7 +209,7 @@ function Draw_Chart_NoData(txtchartname){
 	ctx.fillText('No data to display', 365, 150);
 	ctx.restore();
 }
-function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname,txtdateformat){
+function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname,txtdateformat,sugMinY){
 	var objchartname=window["LineChart"+txtchartname];
 	var txtdataname="Data"+txtchartname;
 	var objdataname=window["Data"+txtchartname];
@@ -257,6 +257,7 @@ function Draw_Chart(txtchartname,txttitle,txtunity,txtunitx,numunitx,colourname,
 				scaleLabel: { display: false, labelString: txttitle },
 				ticks: {
 					display: true,
+					suggestedMin: sugMinY,
 					callback: function (value, index, values) {
 						return round(value,2).toFixed(2) + ' ' + txtunity;
 					}
@@ -429,10 +430,10 @@ function ToggleFill() {
 	RedrawAllCharts();
 }
 function RedrawAllCharts() {
-	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500",'YYYY-MM-DD HH:mm:ss');
-	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5",'YYYY-MM-DD HH:mm:ss');
-	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff",'YYYY-MM-DD HH:mm:ss');
-	Draw_Chart("divLineChartRPZHitsMonthly","DNS Firewall Hits","hit(s)","day",30,"#ffffff",'YYYY-MM-DD');
+	Draw_Chart("divLineChartCacheHitPercentDaily","Cache Hit Percent","%","hour",24,"#fc8500",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartCacheHitPercentWeekly","Cache Hit Percent","%","day",7,"#42ecf5",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartCacheHitPercentMonthly","Cache Hit Percent","%","day",30,"#ffffff",'YYYY-MM-DD HH:mm:ss',100);
+	Draw_Chart("divLineChartRPZHitsMonthly","DNS Firewall Hits","hit(s)","day",30,"#ffffff",'YYYY-MM-DD',0);
 }
 function GetCookie(cookiename) {
 	var s;
