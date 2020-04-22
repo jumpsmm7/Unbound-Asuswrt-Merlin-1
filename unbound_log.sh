@@ -12,7 +12,8 @@
 ## - v1.1 - April 5 2020 - Add support for tracking client IP
 ## - v1.2 - April 13 2020 - Added header and no errors if log doesn't exist
 ## - v1.3 - April 15 2020 - Support tracking an output of blocked sites via DNS Firewall, clean up to speed up
-readonly SCRIPT_VERSION="v1.3"
+## - v1.4 - April 21 2020 - Support non syslog logs (/opt/var/lib/unbound/..)
+readonly SCRIPT_VERSION="v1.4"
 
 Say(){
    echo -e $$ $@ | logger -st "($(basename $0))"
@@ -34,16 +35,28 @@ ScriptHeader(){
 
 ScriptHeader
 
-# $1 logfile
+# default to non-syslog location and variable positions
 unbound_logfile="/opt/var/lib/unbound/unbound.log"
+n_reply_domain=7
+n_reply_reply=10
+n_reply_client_ip=6
+n_nx_domain=6
+n_rpz_domain=9
+n_rpz_zone=8
+n_rpz_client_ip=11
+
+# if syslog control file exists for unbound, then change log location and variable positons
 if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then
   unbound_logfile="/opt/var/log/unbound.log";
+  n_reply_domain=9
+  n_reply_reply=12
+  n_reply_client_ip=8
+  n_nx_domain=8
+  n_rpz_domain=11
+  n_rpz_zone=10
+  n_rpz_client_ip=13
 fi
 
-# can pass in a log file name if desired
-if [ ! -z "$1" ]; then
-  unbound_logfile="$1";
-fi
 echo "Logfile used is $unbound_logfile"
 
 #other variables
@@ -86,17 +99,14 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
 
   # process reply logs - for top daily replies table
   echo "BEGIN;" > $tmpSQL
-  #cat $unbound_logfile | awk -v vardate="$dateString" '/reply: 127.0.0.1/{print "INSERT OR IGNORE INTO reply_domains ([domain],[date],[reply],[count]) VALUES (\x27" substr($9, 1, length($9)-1) "\x27, \x27" vardate "\x27, \x27" $12 "\x27, 0);\nUPDATE reply_domains SET count = count + 1 WHERE domain = \x27" substr($9, 1, length($9)-1)"\x27 AND reply = \x27" $12 "\x27 AND date = \x27" vardate "\x27;"}' >> $tmpSQL
-  cat $unbound_logfile | awk -v vardate="$dateString" '/reply: [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/{print "INSERT OR IGNORE INTO reply_domains ([domain],[date],[reply],[client_ip],[count]) VALUES (\x27" substr($9, 1, length($9)-1) "\x27, \x27" vardate "\x27, \x27" $12 "\x27, \x27" $8 "\x27, 0);\nUPDATE reply_domains SET count = count + 1 WHERE domain = \x27" substr($9, 1, length($9)-1)"\x27 AND reply = \x27" $12 "\x27 AND date = \x27" vardate "\x27 AND client_ip = \x27" $8 "\x27;"}' >> $tmpSQL
+  cat $unbound_logfile | awk -v vardate="$dateString" -v vardomain="$n_reply_domain" -v varreply="$n_reply_reply" -v varclient="$n_reply_client_ip" '/reply: [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/{print "INSERT OR IGNORE INTO reply_domains ([domain],[date],[reply],[client_ip],[count]) VALUES (\x27" substr($vardomain, 1, length($vardomain)-1) "\x27, \x27" vardate "\x27, \x27" $varreply "\x27, \x27" $varclient "\x27, 0);\nUPDATE reply_domains SET count = count + 1 WHERE domain = \x27" substr($vardomain, 1, length($vardomain)-1)"\x27 AND reply = \x27" $varreply "\x27 AND date = \x27" vardate "\x27 AND client_ip = \x27" $varclient "\x27;"}' >> $tmpSQL
   echo "COMMIT;" >> $tmpSQL
 
   # log out the processed nodes
-  #reply_domaincount=$(grep -c "reply: 127.0.0.1" $unbound_logfile)
   reply_domaincount=$(grep -c "reply: \([0-9]\{1,3\}\.\)\{3\}" $unbound_logfile)
   Say "Processed $reply_domaincount reply_domains..." 
 
   echo "Removing reply lines from log file..."
-  #sed -i '\~reply: 127.0.0.1~d' $unbound_logfile
   sed -i '\~reply: \([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}~d' $unbound_logfile
 
   # if syslog-ng running, need to restart it so logging continues
@@ -110,7 +120,7 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
 
   # Add to SQLite all blocked domains (log-local-actions must be yes)
   echo "BEGIN;" > $tmpSQL
-  cat $unbound_logfile | awk -v vardate="$dateString" '/always_nxdomain/{print "INSERT OR IGNORE INTO nx_domains ([domain],[date],[count]) VALUES (\x27" substr($8, 1, length($8)-1) "\x27, \x27" vardate "\x27, 0);\nUPDATE nx_domains SET count = count + 1 WHERE domain = \x27" substr($8, 1, length($8)-1) "\x27 AND date = \x27" vardate "\x27;"}' >> $tmpSQL
+  cat $unbound_logfile | awk -v vardate="$dateString" -v vardomain="$n_nx_domain" '/always_nxdomain/{print "INSERT OR IGNORE INTO nx_domains ([domain],[date],[count]) VALUES (\x27" substr($vardomain, 1, length($vardomain)-1) "\x27, \x27" vardate "\x27, 0);\nUPDATE nx_domains SET count = count + 1 WHERE domain = \x27" substr($vardomain, 1, length($vardomain)-1) "\x27 AND date = \x27" vardate "\x27;"}' >> $tmpSQL
   echo "COMMIT;" >> $tmpSQL
 
   # log out the processed nodes
@@ -135,7 +145,7 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
 
   # Process DNS Firewall stats
   echo "BEGIN;" > $tmpSQL
-  cat $unbound_logfile | awk -v vardate="$dateString" '/info: RPZ applied /{print "INSERT OR IGNORE INTO rpz_events ([domain],[zone],[date],[client_ip],[count]) VALUES (\x27" substr($11, 1, length($11)-1) "\x27, \x27" substr($10, 2, length($10)-2) "\x27, \x27" vardate "\x27, \x27" substr($13, 1, index($13, "@")-1) "\x27,0);\nUPDATE rpz_events SET count = count + 1 WHERE domain = \x27" substr($11, 1, length($11)-1) "\x27 AND zone = \x27" substr($10, 2, length($10)-2) "\x27 AND date = \x27" vardate "\x27 AND client_ip = \x27" substr($13, 1, index($13, "@")-1) "\x27;"}' >> $tmpSQL
+  cat $unbound_logfile | awk -v vardate="$dateString" -v vardomain="$n_rpz_domain" -v varzone="$n_rpz_zone" -v varclient="$n_rpz_client_ip" '/info: RPZ applied /{print "INSERT OR IGNORE INTO rpz_events ([domain],[zone],[date],[client_ip],[count]) VALUES (\x27" substr($vardomain, 1, length($vardomain)-1) "\x27, \x27" substr($varzone, 2, length($varzone)-2) "\x27, \x27" vardate "\x27, \x27" substr($varclient, 1, index($varclient, "@")-1) "\x27,0);\nUPDATE rpz_events SET count = count + 1 WHERE domain = \x27" substr($vardomain, 1, length($vardomain)-1) "\x27 AND zone = \x27" substr($varzone, 2, length($varzone)-2) "\x27 AND date = \x27" vardate "\x27 AND client_ip = \x27" substr($varclient, 1, index($varclient, "@")-1) "\x27;"}' >> $tmpSQL
   echo "COMMIT;" >> $tmpSQL
 
   # log out the processed nodes
