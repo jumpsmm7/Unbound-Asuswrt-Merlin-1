@@ -13,7 +13,8 @@
 ## - v1.2 - April 13 2020 - Added header and no errors if log doesn't exist
 ## - v1.3 - April 15 2020 - Support tracking an output of blocked sites via DNS Firewall, clean up to speed up
 ## - v1.4 - April 21 2020 - Support non syslog logs (/opt/var/lib/unbound/..)
-readonly SCRIPT_VERSION="v1.4"
+## - v1.5 - April 24 2020 - Add support for log_reopen to fix bug for non-syslog users
+readonly SCRIPT_VERSION="v1.5"
 
 Say(){
    echo -e $$ $@ | logger -st "($(basename $0))"
@@ -110,7 +111,7 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
   sed -i '\~reply: \([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}~d' $unbound_logfile
 
   # if syslog-ng running, need to restart it so logging continues
-  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then killall -HUP syslog-ng; fi
+#  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then killall -HUP syslog-ng; fi
 
   echo "Running SQLite to import new reply records..."
   sqlite3 $dbLogFile < $tmpSQL
@@ -135,7 +136,7 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
   sed -i '\~info: [a-zA-Z.]* transparent \([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}~d' $unbound_logfile
 
   # if syslog-ng running, need to restart it so logging continues
-  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then killall -HUP syslog-ng; fi
+#  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then killall -HUP syslog-ng; fi
 
   echo "Running SQLite to import new nx records..."
   sqlite3 $dbLogFile < $tmpSQL
@@ -156,7 +157,11 @@ if [ -f "$unbound_logfile" ]; then # only if log exists
   sed -i '\~info: RPZ applied~d' $unbound_logfile
 
   # if syslog-ng running, need to restart it so logging continues
-  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then killall -HUP syslog-ng; fi
+  if [ -f "/opt/etc/syslog-ng.d/unbound" ]; then 
+    killall -HUP syslog-ng
+  else
+    unbound-control log_reopen
+  fi
 
   echo "Running SQLite to import new rpz event records..."
   sqlite3 $dbLogFile < $tmpSQL
