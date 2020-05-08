@@ -11,6 +11,7 @@
 #    888         888  d88P     888  "Y88888 8888888P"  888  "Y88P"   "Y8888P 888  888 
 ## @juched - dynamically block YT ads
 ##gen_ytadblock.sh
+##based on @grublets script on gitlab here: https://gitlab.com/grublets/youtube-updater-for-pi-hole/-/tree/master
 ## - v1.0 - May 7 2020 - Initial version
 readonly SCRIPT_VERSION="v1.0"
 
