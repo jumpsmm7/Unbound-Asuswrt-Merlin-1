@@ -13,7 +13,8 @@
 ##gen_ytadblock.sh
 ##based on @grublets script on gitlab here: https://gitlab.com/grublets/youtube-updater-for-pi-hole/-/tree/master
 ## - v1.0 - May 7 2020 - Initial version
-readonly SCRIPT_VERSION="v1.0"
+## - v1.1 - May 8 2020 - Fixed issue with force IP file being created empty
+readonly SCRIPT_VERSION="v1.1"
 
 Say(){
    echo -e $$ $@ | logger -st "($(basename $0))"
@@ -42,12 +43,13 @@ ipYTforce="/opt/share/unbound/configs/ipytforce"
 fileYTAds="/opt/var/lib/unbound/adblock/ytadblock"
 
 if [ -n "$(pidof unbound)" ]; then
+  [ -f $ipYTforce ] && [ ! -s $ipYTforce ] && rm -rf $ipYTforce
   if [ ! -f $ipYTforce ]; then
     echo "No stored IP in file $ipYTforce, checking cache for an ip..."
     unbound-control dump_cache | awk '/.*\.googlevideo.*\.[0-9].*\./{print $5;exit}' > "$ipYTforce"
-    if [ ! -s $ipYTforce }; then
+    if [ ! -s $ipYTforce ]; then
       echo "No ip found in unbound cache.  Try to watch a video on YT and try again."
-      [ -f $ipYTforce ] && rm -rf "$ipYTforce"
+      [ -f $ipYTforce ] && rm -rf $ipYTforce
       exit
     fi
   fi
