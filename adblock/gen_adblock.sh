@@ -20,6 +20,7 @@
 # v1.0.5 - Output version header, add count of file processed, and support files with comments AFTER the domain (thanks jumpsmm7)
 # v1.0.6 - Outout to logger as well, swich to reload command, skip commented out download lines, update adblock with using restart or reload
 # v1.0.7 - Fixed issue without count of URLs displayed when some are commented out
+# v1.0.8 - Added support for .zone files.  Filename must end in .zone
 
 Say(){
    echo -e $$ $@  | logger -st "($(basename $0))"
@@ -30,7 +31,7 @@ echo " _____   _ _   _         _   "
 echo "|  _  |_| | |_| |___ ___| |_ "
 echo "|     | . | . | | . |  _| '_|"
 echo "|__|__|___|___|_|___|___|_,_|"
-Say " @juched - v1.0.7 - Thanks to @SomeWhereOverTheRainBow"
+Say " @juched - v1.0.8 - Thanks to @SomeWhereOverTheRainBow"
 echo ""
                              
 #adblock function paths
@@ -76,7 +77,11 @@ download_file () {
     for url in $(echo $line); do
       [ "${url:0:1}" == "#" ] && continue # skip commented out lines - Thanks @Martineau
       echo "Attempting to Download $count of $(awk 'NF && !/^[:space:]*#/' $sites | wc -l) from $url."
-      curl --progress-bar $url | grep -o '^[^#]*' | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -o '^[^\\]*' | grep -o '^[^\\$]*' | sort >> $list
+      if [ "${url##*.}" == "zone" ];then
+        curl --progress-bar $url | sed -rn 's/^local-zone: "(.*)".*$/\1/p' | sort >> $list
+      else
+        curl --progress-bar $url | grep -o '^[^#]*' | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -o '^[^\\]*' | grep -o '^[^\\$]*' | sort >> $list
+      fi
       dos2unix $list
       count=$((count + 1))
     done
