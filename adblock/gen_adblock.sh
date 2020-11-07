@@ -80,9 +80,14 @@ download_file () {
       if [ "${url##*.}" == "zone" ];then
         curl --progress-bar $url | sed -rn 's/^local-zone: "(.*)".*$/\1/p' | sort >> $list
       else
-        curl --progress-bar $url | grep -o '^[^#]*' | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -o '^[^\\]*' | grep -o '^[^\\$]*' | sort >> $list
+        curl --progress-bar $url > ${list}.tmp
+        dos2unix -q ${list}.tmp
+        cat ${list}.tmp | grep -o '^[^#]*' | grep -v "::1" | grep -v "0.0.0.0 0.0.0.0" | sed '/^$/d' | sed 's/\ /\\ /g' | awk '{print $NF}' | grep -o '^[^\\]*' | grep -o '^[^\\$]*' | sort -u >> $list
+        awk  -F'[\\\\|\\\\^| \t]+' -v RS='\r|\n' '{if (($0 ~ /^\|\|.*\^$/ || $1 ~ /^0.0.0.0|127.0.0.1|::1/) && $2 ~ /.*\.[a-z].*/)  printf "%s\n",tolower($2) }' ${list}.tmp | uniq | sort -f >> $list
+        cat $list | sort -u > ${list}.tmp
+        mv ${list}.tmp $list
+        dos2unix -q $list
       fi
-      dos2unix $list
       count=$((count + 1))
     done
   done < "$sites"
@@ -111,7 +116,7 @@ cleanup () {
     rm -rf ${output}.tmp
     mv $unclean $output
   fi
-  cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' > $3
+  cat $output | sed -r -e 's/[[:space:]]+/\t/g' | sed -e 's/\t*#.*$//g' | sed -e 's/[^a-zA-Z0-9\.\_\t\-]//g' | sed -e 's/\t$//g' | sed -e '/^#/d' | sed -e 's/^[ \t]*//;s/[ \t]*$//' | sort -u | sed '/^$/d' | tr -dc '[:print:]\n\r' | tr '[:upper:]' '[:lower:]' > $3
 }
 
 echo "Downloading list(s) from block site(s) configured..."
